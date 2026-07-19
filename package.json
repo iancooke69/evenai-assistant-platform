@@ -12,7 +12,8 @@
     "test:response": "node --test tests/response/*.test.mjs",
     "test:runtime": "node --test tests/runtime/*.test.mjs",
     "test:apps": "node --test tests/apps/*.test.mjs",
-    "test": "npm run validate:knowledge && npm run test:retrieval && npm run test:safety && npm run test:conversation && npm run test:response && npm run test:runtime && npm run test:apps"
+    "test:http": "node --test tests/http/*.test.mjs",
+    "test": "npm run validate:knowledge && npm run test:retrieval && npm run test:safety && npm run test:conversation && npm run test:response && npm run test:runtime && npm run test:apps && npm run test:http"
   },
   "engines": {
     "node": ">=20"
