@@ -2,26 +2,13 @@ name: Verify disabled Worker deployment
 
 on:
   workflow_dispatch:
-    inputs:
-      release_commit:
-        description: Full release commit SHA or text containing exactly one full SHA
-        required: true
-        type: string
-      deployment_run_id:
-        description: Successful deployment run ID or full GitHub Actions run URL
-        required: true
-        type: string
-      production_probe_url:
-        description: HTTPS production URL that must not serve assistant responses
-        required: true
-        type: string
 
 permissions:
   contents: read
   actions: read
 
 env:
-  PRODUCTION_PROBE_URL: ${{ inputs.production_probe_url }}
+  PRODUCTION_PROBE_URL: https://getgascert.com/api/assistant/v1/assist
   DEPLOYMENT_EVIDENCE_PATH: deployment-evidence/disabled-deployment-evidence.json
   RELEASE_CONFIG_PATH: release/wrangler.jsonc
   CLOUDFLARE_DEPLOYMENTS_PATH: cloudflare-deployments.json
@@ -45,19 +32,34 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
 
-      - name: Normalize and validate workflow inputs
-        id: normalized
+      - name: Discover latest successful disabled deployment evidence
+        id: deployment
         env:
-          RAW_RELEASE_COMMIT: ${{ inputs.release_commit }}
-          RAW_DEPLOYMENT_RUN_ID: ${{ inputs.deployment_run_id }}
-        run: node scripts/normalize-disabled-verification-inputs.mjs
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/resolve-disabled-deployment-evidence.mjs
+
+      - name: Download exact disabled deployment evidence
+        uses: actions/download-artifact@v5
+        with:
+          name: disabled-worker-deployment-evidence
+          path: deployment-evidence
+          run-id: ${{ steps.deployment.outputs.deployment_run_id }}
+          repository: ${{ github.repository }}
+          github-token: ${{ github.token }}
+
+      - name: Validate evidence and derive exact release commit
+        id: evidence
+        env:
+          DEPLOYMENT_RUN_ID: ${{ steps.deployment.outputs.deployment_run_id }}
+        run: node scripts/resolve-disabled-deployment-evidence.mjs --read-evidence
 
       - name: Materialize exact deployed release configuration
         env:
-          RELEASE_COMMIT: ${{ steps.normalized.outputs.release_commit }}
-          DEPLOYMENT_RUN_ID: ${{ steps.normalized.outputs.deployment_run_id }}
+          RELEASE_COMMIT: ${{ steps.evidence.outputs.release_commit }}
+          DEPLOYMENT_RUN_ID: ${{ steps.deployment.outputs.deployment_run_id }}
         run: |
           set -euo pipefail
           git cat-file -e "${RELEASE_COMMIT}^{commit}"
@@ -66,15 +68,6 @@ jobs:
           test -s "$RELEASE_CONFIG_PATH"
           echo "RELEASE_COMMIT=${RELEASE_COMMIT}" >> "$GITHUB_ENV"
           echo "DEPLOYMENT_RUN_ID=${DEPLOYMENT_RUN_ID}" >> "$GITHUB_ENV"
-
-      - name: Download disabled deployment evidence
-        uses: actions/download-artifact@v5
-        with:
-          name: disabled-worker-deployment-evidence
-          path: deployment-evidence
-          run-id: ${{ steps.normalized.outputs.deployment_run_id }}
-          repository: ${{ github.repository }}
-          github-token: ${{ github.token }}
 
       - name: Run full repository test suite
         run: npm test
@@ -107,13 +100,14 @@ jobs:
         run: node scripts/verify-disabled-deployment.mjs
 
       - name: Require generated verification evidence
+        if: success()
         run: test -s "$VERIFICATION_EVIDENCE_PATH"
 
       - name: Upload privacy-safe disabled verification evidence
-        if: always()
+        if: ${{ always() && hashFiles('disabled-deployment-verification-evidence.json') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: disabled-deployment-verification-evidence
           path: disabled-deployment-verification-evidence.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 30
