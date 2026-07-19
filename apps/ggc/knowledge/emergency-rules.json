@@ -1,0 +1,12 @@
+[
+  {
+    "id": "suspected-gas-emergency",
+    "triggers": ["smell of gas", "suspected gas leak", "carbon monoxide alarm", "gas emergency"],
+    "response": "This may be a gas emergency. Stop the normal booking flow and present only the approved emergency guidance and human escalation route.",
+    "priority": 1,
+    "actionId": "emergency-human-escalation",
+    "stopNormalFlow": true,
+    "source": {"type": "owner-approved", "reference": "GGC assistant safety boundary", "verifiedAt": "2026-07-19"},
+    "approved": true
+  }
+]
