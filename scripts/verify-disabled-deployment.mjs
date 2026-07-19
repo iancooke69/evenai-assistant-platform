@@ -35,7 +35,7 @@ async function probeProductionRoute(value) {
         origin: "https://disabled-verification.invalid",
       },
       body: JSON.stringify({ message: "disabled deployment verification" }),
-      redirect: "manual",
+      redirect: "follow",
       signal: controller.signal,
     });
 
