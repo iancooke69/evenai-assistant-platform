@@ -61,7 +61,7 @@ function binding(settings, name) {
 
 function cloudflareDeploymentPresent(deployments) {
   if (deployments?.success !== true) return false;
-  const records = deployments?.result;
+  const records = deployments?.result?.deployments;
   if (!Array.isArray(records) || records.length === 0) return false;
   return records.some((record) => (
     typeof record?.id === "string"
