@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evenai.uk/schemas/action.schema.json",
+  "title": "Deterministic assistant action",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "type", "label", "status", "approved"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+    "type": {"enum": ["booking", "whatsapp", "email", "internal"]},
+    "label": {"type": "string", "minLength": 1},
+    "url": {"type": ["string", "null"], "format": "uri"},
+    "status": {"enum": ["active", "disabled", "draft"]},
+    "approved": {"type": "boolean"}
+  },
+  "allOf": [{"if": {"properties": {"status": {"const": "active"}}}, "then": {"required": ["url"], "properties": {"approved": {"const": true}, "url": {"type": "string"}}}}]
+}
