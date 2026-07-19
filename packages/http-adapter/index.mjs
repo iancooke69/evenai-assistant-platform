@@ -11,9 +11,18 @@ function json(status, payload, extraHeaders = {}) {
   });
 }
 
+function generatedRequestId() {
+  const randomUuid = globalThis.crypto?.randomUUID;
+  if (typeof randomUuid === "function") {
+    return randomUuid.call(globalThis.crypto);
+  }
+
+  return `req-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`;
+}
+
 function requestId(request) {
   const supplied = request.headers.get("x-request-id")?.trim();
-  return supplied && supplied.length <= 128 ? supplied : crypto.randomUUID();
+  return supplied && supplied.length <= 128 ? supplied : generatedRequestId();
 }
 
 export function createAssistantHttpHandler(options = {}) {
