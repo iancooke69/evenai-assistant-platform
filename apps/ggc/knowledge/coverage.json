@@ -1,0 +1,11 @@
+[
+  {
+    "id": "east-anglia",
+    "name": "East Anglia",
+    "kind": "region",
+    "status": "served",
+    "notes": "Town and postcode-level coverage must be confirmed before the assistant makes a definitive availability claim.",
+    "source": {"type": "owner-approved", "reference": "GGC canonical service region", "verifiedAt": "2026-07-19"},
+    "approved": true
+  }
+]
