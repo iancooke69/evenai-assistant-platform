@@ -1,0 +1,48 @@
+name: Knowledge validation
+
+on:
+  pull_request:
+    paths:
+      - "apps/**/knowledge/**"
+      - "knowledge/schemas/**"
+      - "scripts/validate-knowledge.mjs"
+      - "package.json"
+      - ".github/workflows/knowledge-validation.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/**/knowledge/**"
+      - "knowledge/schemas/**"
+      - "scripts/validate-knowledge.mjs"
+      - "package.json"
+      - ".github/workflows/knowledge-validation.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: knowledge-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate approved knowledge
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install project metadata
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Validate knowledge integrity
+        run: npm run validate:knowledge
