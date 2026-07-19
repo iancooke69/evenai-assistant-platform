@@ -5,6 +5,7 @@
   "compatibility_date": "2026-07-19",
   "workers_dev": false,
   "vars": {
-    "ENABLE_PUBLIC_ASSISTANT": "false"
+    "ENABLE_PUBLIC_ASSISTANT": "false",
+    "ALLOWED_ORIGINS": ""
   }
 }
