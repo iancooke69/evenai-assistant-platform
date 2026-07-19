@@ -5,13 +5,21 @@ import worker from "../../apps/ggc/worker.mjs";
 const allowedOrigin = "https://www.getgascert.com";
 
 function request(path, init = {}) {
-  return new Request(`https://assistant.example${path}`, init);
+  const headers = new Headers(init.headers);
+  headers.set("cf-connecting-ip", headers.get("cf-connecting-ip") ?? "203.0.113.10");
+  return new Request(`https://assistant.example${path}`, { ...init, headers });
 }
 
-function enabledEnv() {
+function limiter(success = true) {
+  return { limit: async () => ({ success }) };
+}
+
+function enabledEnv(overrides = {}) {
   return {
     ENABLE_PUBLIC_ASSISTANT: "true",
     ALLOWED_ORIGINS: `${allowedOrigin}, https://getgascert.com`,
+    RATE_LIMITER: limiter(true),
+    ...overrides,
   };
 }
 
@@ -24,6 +32,7 @@ test("health remains available while the assistant is disabled", async () => {
   assert.equal(response.status, 200);
   assert.equal(body.ok, true);
   assert.equal(body.publicAssistantEnabled, false);
+  assert.equal(body.rateLimiterConfigured, false);
   assert.equal(response.headers.get("cache-control"), "no-store");
 });
 
@@ -68,7 +77,34 @@ test("approved preflight receives a constrained CORS policy", async () => {
   assert.equal(response.headers.get("vary"), "Origin");
 });
 
-test("enabled Worker delegates approved-origin requests", async () => {
+test("enabled Worker fails closed when the rate limiter is unavailable", async () => {
+  const response = await worker.fetch(request("/v1/assist", {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: allowedOrigin },
+    body: JSON.stringify({ message: "How much is a CP42?" }),
+  }), enabledEnv({ RATE_LIMITER: undefined }));
+  const body = await response.json();
+
+  assert.equal(response.status, 503);
+  assert.equal(body.error, "rate-limiter-unavailable");
+  assert.equal(response.headers.get("retry-after"), "60");
+});
+
+test("enabled Worker returns 429 when the request limit is exceeded", async () => {
+  const response = await worker.fetch(request("/v1/assist", {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: allowedOrigin },
+    body: JSON.stringify({ message: "How much is a CP42?" }),
+  }), enabledEnv({ RATE_LIMITER: limiter(false), RATE_LIMIT_RETRY_AFTER_SECONDS: "90" }));
+  const body = await response.json();
+
+  assert.equal(response.status, 429);
+  assert.equal(body.error, "rate-limit-exceeded");
+  assert.equal(response.headers.get("retry-after"), "90");
+  assert.equal(response.headers.get("access-control-allow-origin"), allowedOrigin);
+});
+
+test("enabled Worker delegates approved and permitted requests", async () => {
   const response = await worker.fetch(request("/v1/assist", {
     method: "POST",
     headers: { "content-type": "application/json", origin: allowedOrigin },
