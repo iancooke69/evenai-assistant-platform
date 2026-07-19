@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evenai.uk/schemas/service.schema.json",
+  "title": "Service knowledge record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "summary", "status", "source", "approved"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+    "name": {"type": "string", "minLength": 1},
+    "summary": {"type": "string", "minLength": 1},
+    "status": {"enum": ["active", "inactive", "draft"]},
+    "keywords": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "priceId": {"type": ["string", "null"]},
+    "bookingActionId": {"type": ["string", "null"]},
+    "source": {"$ref": "source.schema.json"},
+    "approved": {"type": "boolean", "const": true}
+  }
+}
