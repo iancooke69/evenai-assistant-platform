@@ -1,0 +1,102 @@
+name: Verify disabled Worker deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_commit:
+        description: Full 40-character release commit SHA used by the disabled deployment
+        required: true
+        type: string
+      deployment_run_id:
+        description: Successful Deploy disabled Worker workflow run ID
+        required: true
+        type: string
+      production_probe_url:
+        description: HTTPS production URL that must not serve assistant responses
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  RELEASE_COMMIT: ${{ inputs.release_commit }}
+  DEPLOYMENT_RUN_ID: ${{ inputs.deployment_run_id }}
+  PRODUCTION_PROBE_URL: ${{ inputs.production_probe_url }}
+  DEPLOYMENT_EVIDENCE_PATH: deployment-evidence/disabled-deployment-evidence.json
+  RELEASE_CONFIG_PATH: release/wrangler.jsonc
+  CLOUDFLARE_DEPLOYMENTS_PATH: cloudflare-deployments.json
+  CLOUDFLARE_SETTINGS_PATH: cloudflare-settings.json
+  VERIFICATION_EVIDENCE_PATH: disabled-deployment-verification-evidence.json
+  WORKER_NAME: evenai-ggc-assistant
+
+jobs:
+  verify-disabled:
+    name: Verify deployed Worker remains disabled
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production-disabled
+
+    steps:
+      - name: Check out verification control plane
+        uses: actions/checkout@v5
+
+      - name: Check out exact deployed release
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.release_commit }}
+          path: release
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      - name: Download disabled deployment evidence
+        uses: actions/download-artifact@v5
+        with:
+          name: disabled-worker-deployment-evidence
+          path: deployment-evidence
+          run-id: ${{ inputs.deployment_run_id }}
+          repository: ${{ github.repository }}
+          github-token: ${{ github.token }}
+
+      - name: Run full repository test suite
+        run: npm test
+
+      - name: Require Cloudflare verification configuration
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "Missing CLOUDFLARE_API_TOKEN"; exit 1; }
+          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "Missing CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+
+      - name: Read live Cloudflare deployment and bindings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          API_ROOT="https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${WORKER_NAME}"
+          curl --silent --show-error --fail-with-body \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "${API_ROOT}/deployments" \
+            --output "$CLOUDFLARE_DEPLOYMENTS_PATH"
+          curl --silent --show-error --fail-with-body \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "${API_ROOT}/settings" \
+            --output "$CLOUDFLARE_SETTINGS_PATH"
+
+      - name: Verify exact disabled deployment
+        run: node scripts/verify-disabled-deployment.mjs
+
+      - name: Upload privacy-safe disabled verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: disabled-deployment-verification-evidence
+          path: disabled-deployment-verification-evidence.json
+          if-no-files-found: error
+          retention-days: 30
