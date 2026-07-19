@@ -1,3 +1,4 @@
+import { enforceRateLimit } from "../../packages/rate-limit-policy/index.mjs";
 import { handleGgcAssistantRequest } from "./http.mjs";
 
 function json(status, body, extraHeaders = {}) {
@@ -53,6 +54,7 @@ export default {
         ok: true,
         service: "evenai-ggc-assistant",
         publicAssistantEnabled: env.ENABLE_PUBLIC_ASSISTANT === "true",
+        rateLimiterConfigured: typeof env.RATE_LIMITER?.limit === "function",
       });
     }
 
@@ -76,6 +78,19 @@ export default {
         status: 204,
         headers: corsHeaders(origin),
       });
+    }
+
+    const rateLimit = await enforceRateLimit(request, env);
+    if (!rateLimit.allowed) {
+      const status = rateLimit.reason === "rate-limit-exceeded" ? 429 : 503;
+      return withCors(json(status, {
+        error: rateLimit.reason,
+        message: status === 429
+          ? "Too many assistant requests. Try again later."
+          : "The assistant rate limiter is unavailable.",
+      }, {
+        "retry-after": String(rateLimit.retryAfter),
+      }), origin);
     }
 
     return withCors(await handleGgcAssistantRequest(request), origin);

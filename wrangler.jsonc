@@ -6,6 +6,7 @@
   "workers_dev": false,
   "vars": {
     "ENABLE_PUBLIC_ASSISTANT": "false",
-    "ALLOWED_ORIGINS": ""
+    "ALLOWED_ORIGINS": "",
+    "RATE_LIMIT_RETRY_AFTER_SECONDS": "60"
   }
 }
