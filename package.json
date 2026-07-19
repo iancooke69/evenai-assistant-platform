@@ -17,8 +17,9 @@
     "test:deployment": "node --test tests/deployment/*.test.mjs",
     "test:release": "node --test tests/release/*.test.mjs",
     "test:rollback": "node --test tests/rollback/*.test.mjs",
+    "test:verification": "node --test tests/verification/*.test.mjs",
     "test:worker": "node --test tests/worker/*.test.mjs",
-    "test": "npm run validate:knowledge && npm run test:retrieval && npm run test:safety && npm run test:conversation && npm run test:response && npm run test:runtime && npm run test:apps && npm run test:http && npm run test:telemetry && npm run test:deployment && npm run test:release && npm run test:rollback && npm run test:worker"
+    "test": "npm run validate:knowledge && npm run test:retrieval && npm run test:safety && npm run test:conversation && npm run test:response && npm run test:runtime && npm run test:apps && npm run test:http && npm run test:telemetry && npm run test:deployment && npm run test:release && npm run test:rollback && npm run test:verification && npm run test:worker"
   },
   "engines": {
     "node": ">=20"
