@@ -12,6 +12,38 @@ function json(status, body, extraHeaders = {}) {
   });
 }
 
+function allowedOrigins(env = {}) {
+  return new Set(
+    String(env.ALLOWED_ORIGINS ?? "")
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+  );
+}
+
+function corsHeaders(origin) {
+  return {
+    "access-control-allow-origin": origin,
+    "access-control-allow-methods": "POST, OPTIONS",
+    "access-control-allow-headers": "content-type, x-request-id",
+    "access-control-max-age": "600",
+    vary: "Origin",
+  };
+}
+
+function withCors(response, origin) {
+  const headers = new Headers(response.headers);
+  for (const [name, value] of Object.entries(corsHeaders(origin))) {
+    headers.set(name, value);
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 export default {
   async fetch(request, env = {}) {
     const url = new URL(request.url);
@@ -31,6 +63,21 @@ export default {
       });
     }
 
-    return handleGgcAssistantRequest(request);
+    const origin = request.headers.get("origin")?.trim() ?? "";
+    if (!origin || !allowedOrigins(env).has(origin)) {
+      return json(403, {
+        error: "origin_not_allowed",
+        message: "This origin is not permitted to access the assistant.",
+      }, { vary: "Origin" });
+    }
+
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: corsHeaders(origin),
+      });
+    }
+
+    return withCors(await handleGgcAssistantRequest(request), origin);
   },
 };
