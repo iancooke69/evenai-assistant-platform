@@ -49,6 +49,9 @@ jobs:
           repository: ${{ github.repository }}
           github-token: ${{ github.token }}
 
+      - name: Normalize release-gate evidence filename
+        run: mv release-gate/release-gate-evidence.json release-gate/manual-release-gate-evidence.json
+
       - name: Run full repository test suite
         run: npm test
 
