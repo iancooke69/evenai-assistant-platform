@@ -78,7 +78,8 @@ function sourceConfigDisabled(config) {
 
 function routeNotServingAssistant(probe) {
   return Number.isInteger(probe?.status)
-    && probe.status >= 400
+    && probe.status >= 100
+    && probe.status <= 599
     && probe.assistantResponse !== true;
 }
 
