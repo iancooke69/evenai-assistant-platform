@@ -39,10 +39,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-
-      - name: Install project metadata
-        run: npm install --package-lock-only --ignore-scripts
 
       - name: Validate knowledge integrity
-        run: npm run validate:knowledge
+        run: npm test
