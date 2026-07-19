@@ -1,0 +1,67 @@
+name: Manual release gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_commit:
+        description: Full 40-character release commit SHA
+        required: true
+        type: string
+      rollback_commit:
+        description: Full 40-character rollback commit SHA
+        required: true
+        type: string
+      production_route:
+        description: Intended production Worker route
+        required: true
+        type: string
+      privacy_notice_url:
+        description: Public privacy notice URL
+        required: true
+        type: string
+      allowed_origins:
+        description: Comma-separated approved HTTPS origins
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_COMMIT: ${{ inputs.release_commit }}
+  ROLLBACK_COMMIT: ${{ inputs.rollback_commit }}
+  PRODUCTION_ROUTE: ${{ inputs.production_route }}
+  PRIVACY_NOTICE_URL: ${{ inputs.privacy_notice_url }}
+  ALLOWED_ORIGINS: ${{ inputs.allowed_origins }}
+  RELEASE_EVIDENCE_PATH: release-gate-evidence.json
+
+jobs:
+  authorize-disabled-deployment:
+    name: Authorize disabled deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.release_commit }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      - name: Run full repository test suite
+        run: npm test
+
+      - name: Validate release gate and create evidence
+        run: node scripts/manual-release-gate.mjs
+
+      - name: Upload privacy-safe release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: manual-release-gate-evidence
+          path: release-gate-evidence.json
+          if-no-files-found: error
+          retention-days: 30
