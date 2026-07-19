@@ -1,0 +1,77 @@
+name: Authorize canary activation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  VERIFICATION_EVIDENCE_PATH: verification-evidence/disabled-deployment-verification-evidence.json
+  CANARY_AUTHORIZATION_PATH: canary-activation-authorization.json
+
+jobs:
+  authorize-canary:
+    name: Authorize bounded canary without activation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production-disabled
+
+    steps:
+      - name: Check out authorization control plane
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Discover latest successful disabled deployment
+        id: deployment
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/resolve-disabled-deployment-evidence.mjs
+
+      - name: Discover latest successful disabled verification
+        id: verification
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/resolve-disabled-verification-evidence.mjs
+
+      - name: Download exact disabled verification evidence
+        uses: actions/download-artifact@v5
+        with:
+          name: disabled-deployment-verification-evidence
+          path: verification-evidence
+          run-id: ${{ steps.verification.outputs.verification_run_id }}
+          repository: ${{ github.repository }}
+          github-token: ${{ github.token }}
+
+      - name: Validate verification is for latest deployment
+        id: evidence
+        env:
+          LATEST_DEPLOYMENT_RUN_ID: ${{ steps.deployment.outputs.deployment_run_id }}
+        run: node scripts/resolve-disabled-verification-evidence.mjs --read-evidence
+
+      - name: Run full repository test suite
+        run: npm test
+
+      - name: Create bounded canary authorization evidence
+        env:
+          VERIFICATION_RUN_ID: ${{ steps.verification.outputs.verification_run_id }}
+          LATEST_DEPLOYMENT_RUN_ID: ${{ steps.deployment.outputs.deployment_run_id }}
+        run: node scripts/authorize-canary-activation.mjs
+
+      - name: Require generated authorization evidence
+        run: test -s "$CANARY_AUTHORIZATION_PATH"
+
+      - name: Upload privacy-safe canary authorization
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-activation-authorization
+          path: canary-activation-authorization.json
+          if-no-files-found: error
+          retention-days: 30
