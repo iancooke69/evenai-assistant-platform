@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "validate:knowledge": "node scripts/validate-knowledge.mjs",
-    "test": "npm run validate:knowledge"
+    "test:retrieval": "node --test tests/knowledge/*.test.mjs",
+    "test": "npm run validate:knowledge && npm run test:retrieval"
   },
   "engines": {
     "node": ">=20"
