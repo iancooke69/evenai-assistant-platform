@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evenai.uk/schemas/coverage.schema.json",
+  "title": "Service coverage record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "kind", "status", "source", "approved"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+    "name": {"type": "string", "minLength": 1},
+    "kind": {"enum": ["region", "county", "town", "postcode-prefix"]},
+    "status": {"enum": ["served", "conditional", "not-served", "draft"]},
+    "notes": {"type": "string"},
+    "source": {"$ref": "source.schema.json"},
+    "approved": {"type": "boolean", "const": true}
+  }
+}

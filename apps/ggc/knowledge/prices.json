@@ -1,0 +1,5 @@
+[
+  {"id":"price-cp42","serviceId":"cp42","currency":"GBP","amountMinor":29900,"display":"£299","status":"active","conditions":[],"source":{"type":"owner-approved","reference":"GGC canonical pricing","verifiedAt":"2026-07-19"},"approved":true},
+  {"id":"price-cp44","serviceId":"cp44","currency":"GBP","amountMinor":24900,"display":"£249","status":"active","conditions":[],"source":{"type":"owner-approved","reference":"GGC canonical pricing","verifiedAt":"2026-07-19"},"approved":true},
+  {"id":"price-cp12","serviceId":"cp12","currency":"GBP","amountMinor":9900,"display":"£99","status":"active","conditions":[],"source":{"type":"owner-approved","reference":"GGC canonical pricing","verifiedAt":"2026-07-19"},"approved":true}
+]

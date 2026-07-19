@@ -1,0 +1,10 @@
+[
+  {
+    "id": "emergency-human-escalation",
+    "type": "whatsapp",
+    "label": "Contact GetGasCert",
+    "url": null,
+    "status": "disabled",
+    "approved": false
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://evenai.uk/schemas/source.schema.json",
+  "title": "Approved source metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "reference", "verifiedAt"],
+  "properties": {
+    "type": {"enum": ["website", "policy", "owner-approved", "system"]},
+    "reference": {"type": "string", "minLength": 1},
+    "verifiedAt": {"type": "string", "format": "date"},
+    "notes": {"type": "string"}
+  }
+}
