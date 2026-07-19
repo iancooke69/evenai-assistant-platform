@@ -33,7 +33,7 @@ const context = {
   emergencyRules: [
     {
       id: "suspected-gas-emergency",
-      triggers: ["smell of gas", "carbon monoxide alarm"],
+      triggers: ["smell of gas", "smell gas", "carbon monoxide alarm"],
       response: "This may be a gas emergency. Stop the normal booking flow.",
       priority: 1,
       actionId: "emergency-human-escalation",

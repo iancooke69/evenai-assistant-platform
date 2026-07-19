@@ -26,7 +26,7 @@ export async function loadGgcContext() {
     actions: [...bookingActions, ...escalationActions],
     emergencyRules,
     minimumScore: 8,
-    limit: 3,
+    limit: 1,
   });
 }
 

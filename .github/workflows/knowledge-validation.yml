@@ -8,6 +8,9 @@ on:
       - "scripts/validate-knowledge.mjs"
       - "package.json"
       - ".github/workflows/knowledge-validation.yml"
+      - "packages/**"
+      - "tests/**"
+      - "apps/**.mjs"
   push:
     branches:
       - main
@@ -17,6 +20,9 @@ on:
       - "scripts/validate-knowledge.mjs"
       - "package.json"
       - ".github/workflows/knowledge-validation.yml"
+      - "packages/**"
+      - "tests/**"
+      - "apps/**.mjs"
 
 permissions:
   contents: read
@@ -33,12 +39,45 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
 
       - name: Validate knowledge integrity
-        run: npm test
+        run: npm run validate:knowledge
+
+      - name: Test knowledge retrieval
+        run: npm run test:retrieval
+
+      - name: Test safety routing
+        run: npm run test:safety
+
+      - name: Test conversation orchestration
+        run: npm run test:conversation
+
+      - name: Test response composition
+        run: npm run test:response
+
+      - name: Test assistant runtime
+        run: npm run test:runtime
+
+      - name: Test GGC context loading
+        run: node --test --test-name-pattern="loads the approved GGC reference context" tests/apps/*.test.mjs
+
+      - name: Test GGC CP44 response
+        run: node --test --test-name-pattern="answers a CP44 enquiry" tests/apps/*.test.mjs
+
+      - name: Test GGC hidden actions
+        run: node --test --test-name-pattern="keeps unavailable booking actions hidden" tests/apps/*.test.mjs
+
+      - name: Test GGC emergency routing
+        run: node --test --test-name-pattern="routes gas emergency language" tests/apps/*.test.mjs
+
+      - name: Test HTTP contract
+        run: npm run test:http
+
+      - name: Test Cloudflare Worker shell
+        run: npm run test:worker
