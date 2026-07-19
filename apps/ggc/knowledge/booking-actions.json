@@ -1,0 +1,5 @@
+[
+  {"id":"book-cp42","type":"booking","label":"Book CP42","url":null,"status":"disabled","approved":false},
+  {"id":"book-cp44","type":"booking","label":"Book CP44","url":null,"status":"disabled","approved":false},
+  {"id":"book-cp12","type":"booking","label":"Book CP12","url":null,"status":"disabled","approved":false}
+]
