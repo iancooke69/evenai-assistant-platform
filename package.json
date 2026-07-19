@@ -9,7 +9,8 @@
     "test:retrieval": "node --test tests/knowledge/*.test.mjs",
     "test:safety": "node --test tests/safety/*.test.mjs",
     "test:conversation": "node --test tests/conversation/*.test.mjs",
-    "test": "npm run validate:knowledge && npm run test:retrieval && npm run test:safety && npm run test:conversation"
+    "test:response": "node --test tests/response/*.test.mjs",
+    "test": "npm run validate:knowledge && npm run test:retrieval && npm run test:safety && npm run test:conversation && npm run test:response"
   },
   "engines": {
     "node": ">=20"
