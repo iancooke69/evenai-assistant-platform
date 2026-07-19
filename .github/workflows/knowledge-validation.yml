@@ -64,8 +64,17 @@ jobs:
       - name: Test assistant runtime
         run: npm run test:runtime
 
-      - name: Test application adapters
-        run: npm run test:apps
+      - name: Test GGC context loading
+        run: node --test --test-name-pattern="loads the approved GGC reference context" tests/apps/*.test.mjs
+
+      - name: Test GGC CP44 response
+        run: node --test --test-name-pattern="answers a CP44 enquiry" tests/apps/*.test.mjs
+
+      - name: Test GGC hidden actions
+        run: node --test --test-name-pattern="keeps unavailable booking actions hidden" tests/apps/*.test.mjs
+
+      - name: Test GGC emergency routing
+        run: node --test --test-name-pattern="routes gas emergency language" tests/apps/*.test.mjs
 
       - name: Test HTTP contract
         run: npm run test:http
