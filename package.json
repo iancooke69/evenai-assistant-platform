@@ -7,7 +7,8 @@
   "scripts": {
     "validate:knowledge": "node scripts/validate-knowledge.mjs",
     "test:retrieval": "node --test tests/knowledge/*.test.mjs",
-    "test": "npm run validate:knowledge && npm run test:retrieval"
+    "test:safety": "node --test tests/safety/*.test.mjs",
+    "test": "npm run validate:knowledge && npm run test:retrieval && npm run test:safety"
   },
   "engines": {
     "node": ">=20"
