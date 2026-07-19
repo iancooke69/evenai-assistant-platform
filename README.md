@@ -1,12 +1,36 @@
 # EVENAI Assistant Platform
 
-A modular AI assistant platform for service businesses. Build branded, domain-specific assistants with secure knowledge retrieval, configurable workflows, lead capture, booking integrations, analytics and multi-tenant deployment.
+A modular assistant platform for service businesses, built around deterministic knowledge retrieval, safety routing and reusable operational controls.
 
 ## Reference implementation
 
 **RI-001: GetGasCert Assistant**
 
-The first production implementation will validate the platform against a real service-business workflow: commercial gas certification, emergency enquiries, pricing, service-area questions, booking and WhatsApp escalation.
+The GetGasCert reference implementation validates the platform against commercial gas certification, emergency enquiries, pricing and service-area questions.
+
+## Implemented
+
+- approved knowledge schemas and validation;
+- deterministic knowledge retrieval;
+- emergency and safety routing;
+- conversation orchestration and response composition;
+- executable GetGasCert assistant runtime;
+- framework-neutral HTTP contract;
+- Cloudflare Worker shell;
+- exact-origin browser policy;
+- fail-closed rate-limit boundary;
+- privacy-minimised telemetry contract;
+- deployment-readiness, release, rollback and verification policy modules.
+
+## Planned
+
+- production Cloudflare bindings and custom routing;
+- public website activation;
+- lead capture and WhatsApp escalation;
+- booking integrations;
+- analytics infrastructure;
+- AI-provider integration;
+- reusable multi-tenant provisioning.
 
 ## Repository layout
 
@@ -15,9 +39,9 @@ The first production implementation will validate the platform against a real se
 - `docs/` — architecture, specifications, safety and operational documentation
 - `knowledge/` — shared schemas and reusable knowledge templates
 - `tests/` — unit, integration and regression coverage
-- `scripts/` — validation and deployment utilities
+- `scripts/` — validation utilities
 - `assets/` — approved branding and evidence assets
 
 ## Delivery status
 
-Foundation work is in progress. No production AI assistant has been released yet.
+The deterministic platform core and GetGasCert reference runtime are implemented. No production assistant has been deployed or publicly enabled.
