@@ -8,6 +8,14 @@ const ALLOWED_OUTCOMES = new Set([
   "assistant-response",
 ]);
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function safeRequestId(value) {
+  return typeof value === "string" && UUID_PATTERN.test(value.trim())
+    ? value.trim().toLowerCase()
+    : null;
+}
+
 export function createTelemetryEvent(input = {}) {
   const outcome = ALLOWED_OUTCOMES.has(input.outcome) ? input.outcome : "assistant-response";
   const status = Number.isInteger(input.status) ? input.status : 500;
@@ -21,9 +29,7 @@ export function createTelemetryEvent(input = {}) {
     outcome,
     status,
     durationMs,
-    requestId: typeof input.requestId === "string" && input.requestId.length <= 128
-      ? input.requestId
-      : null,
+    requestId: safeRequestId(input.requestId),
     recordedAt: new Date().toISOString(),
   });
 }
