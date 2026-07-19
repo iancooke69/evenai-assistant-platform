@@ -31,10 +31,12 @@ function passingInput() {
     },
     cloudflareDeployments: {
       success: true,
-      result: [{
-        id: "deployment-id",
-        versions: [{ version_id: "version-id", percentage: 100 }],
-      }],
+      result: {
+        deployments: [{
+          id: "deployment-id",
+          versions: [{ version_id: "version-id", percentage: 100 }],
+        }],
+      },
     },
     cloudflareSettings: {
       success: true,
@@ -61,6 +63,15 @@ test("retains only a verified disabled deployment", () => {
   assert.deepEqual(result.failedChecks, []);
   assert.equal(result.controls.canaryActivationAuthorized, false);
   assert.equal(result.controls.publicActivationProhibited, true);
+});
+
+test("fails closed when the Cloudflare deployment envelope is malformed", () => {
+  const input = passingInput();
+  input.cloudflareDeployments.result = input.cloudflareDeployments.result.deployments;
+  const result = verifyDisabledDeployment(input);
+
+  assert.equal(result.verified, false);
+  assert.deepEqual(result.failedChecks, ["cloudflare-deployment"]);
 });
 
 test("fails closed when live configuration enables the assistant", () => {
