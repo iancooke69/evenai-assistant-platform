@@ -8,6 +8,9 @@ on:
       - "scripts/validate-knowledge.mjs"
       - "package.json"
       - ".github/workflows/knowledge-validation.yml"
+      - "packages/**"
+      - "tests/**"
+      - "apps/**.mjs"
   push:
     branches:
       - main
@@ -17,6 +20,9 @@ on:
       - "scripts/validate-knowledge.mjs"
       - "package.json"
       - ".github/workflows/knowledge-validation.yml"
+      - "packages/**"
+      - "tests/**"
+      - "apps/**.mjs"
 
 permissions:
   contents: read
@@ -41,4 +47,28 @@ jobs:
           node-version: 20
 
       - name: Validate knowledge integrity
-        run: npm test
+        run: npm run validate:knowledge
+
+      - name: Test knowledge retrieval
+        run: npm run test:retrieval
+
+      - name: Test safety routing
+        run: npm run test:safety
+
+      - name: Test conversation orchestration
+        run: npm run test:conversation
+
+      - name: Test response composition
+        run: npm run test:response
+
+      - name: Test assistant runtime
+        run: npm run test:runtime
+
+      - name: Test application adapters
+        run: npm run test:apps
+
+      - name: Test HTTP contract
+        run: npm run test:http
+
+      - name: Test Cloudflare Worker shell
+        run: npm run test:worker
