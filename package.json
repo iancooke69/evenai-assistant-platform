@@ -8,7 +8,8 @@
     "validate:knowledge": "node scripts/validate-knowledge.mjs",
     "test:retrieval": "node --test tests/knowledge/*.test.mjs",
     "test:safety": "node --test tests/safety/*.test.mjs",
-    "test": "npm run validate:knowledge && npm run test:retrieval && npm run test:safety"
+    "test:conversation": "node --test tests/conversation/*.test.mjs",
+    "test": "npm run validate:knowledge && npm run test:retrieval && npm run test:safety && npm run test:conversation"
   },
   "engines": {
     "node": ">=20"
