@@ -1,0 +1,14 @@
+{
+  "name": "evenai-assistant-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Modular AI assistant platform for branded, domain-specific business assistants.",
+  "type": "module",
+  "scripts": {
+    "validate:knowledge": "node scripts/validate-knowledge.mjs",
+    "test": "npm run validate:knowledge"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
