@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       release_commit:
-        description: Full 40-character release commit SHA used by the disabled deployment
+        description: Full release commit SHA or text containing exactly one full SHA
         required: true
         type: string
       deployment_run_id:
-        description: Successful Deploy disabled Worker workflow run ID
+        description: Successful deployment run ID or full GitHub Actions run URL
         required: true
         type: string
       production_probe_url:
@@ -21,8 +21,6 @@ permissions:
   actions: read
 
 env:
-  RELEASE_COMMIT: ${{ inputs.release_commit }}
-  DEPLOYMENT_RUN_ID: ${{ inputs.deployment_run_id }}
   PRODUCTION_PROBE_URL: ${{ inputs.production_probe_url }}
   DEPLOYMENT_EVIDENCE_PATH: deployment-evidence/disabled-deployment-evidence.json
   RELEASE_CONFIG_PATH: release/wrangler.jsonc
@@ -39,26 +37,42 @@ jobs:
     environment: production-disabled
 
     steps:
-      - name: Check out verification control plane
-        uses: actions/checkout@v5
-
-      - name: Check out exact deployed release
+      - name: Check out verification control plane and history
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.release_commit }}
-          path: release
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 20
 
+      - name: Normalize and validate workflow inputs
+        id: normalized
+        env:
+          RAW_RELEASE_COMMIT: ${{ inputs.release_commit }}
+          RAW_DEPLOYMENT_RUN_ID: ${{ inputs.deployment_run_id }}
+        run: node scripts/normalize-disabled-verification-inputs.mjs
+
+      - name: Materialize exact deployed release configuration
+        env:
+          RELEASE_COMMIT: ${{ steps.normalized.outputs.release_commit }}
+          DEPLOYMENT_RUN_ID: ${{ steps.normalized.outputs.deployment_run_id }}
+        run: |
+          set -euo pipefail
+          git cat-file -e "${RELEASE_COMMIT}^{commit}"
+          mkdir -p release
+          git show "${RELEASE_COMMIT}:wrangler.jsonc" > "$RELEASE_CONFIG_PATH"
+          test -s "$RELEASE_CONFIG_PATH"
+          echo "RELEASE_COMMIT=${RELEASE_COMMIT}" >> "$GITHUB_ENV"
+          echo "DEPLOYMENT_RUN_ID=${DEPLOYMENT_RUN_ID}" >> "$GITHUB_ENV"
+
       - name: Download disabled deployment evidence
         uses: actions/download-artifact@v5
         with:
           name: disabled-worker-deployment-evidence
           path: deployment-evidence
-          run-id: ${{ inputs.deployment_run_id }}
+          run-id: ${{ steps.normalized.outputs.deployment_run_id }}
           repository: ${{ github.repository }}
           github-token: ${{ github.token }}
 
@@ -92,11 +106,14 @@ jobs:
       - name: Verify exact disabled deployment
         run: node scripts/verify-disabled-deployment.mjs
 
+      - name: Require generated verification evidence
+        run: test -s "$VERIFICATION_EVIDENCE_PATH"
+
       - name: Upload privacy-safe disabled verification evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: disabled-deployment-verification-evidence
           path: disabled-deployment-verification-evidence.json
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
