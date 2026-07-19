@@ -1,4 +1,5 @@
 import { enforceRateLimit } from "../../packages/rate-limit-policy/index.mjs";
+import { createTelemetryEvent, recordTelemetry } from "../../packages/telemetry-policy/index.mjs";
 import { handleGgcAssistantRequest } from "./http.mjs";
 
 function json(status, body, extraHeaders = {}) {
@@ -45,45 +46,59 @@ function withCors(response, origin) {
   });
 }
 
+function finish(response, outcome, startedAt, env, ctx, requestId = null) {
+  const event = createTelemetryEvent({
+    outcome,
+    status: response.status,
+    durationMs: Date.now() - startedAt,
+    requestId,
+  });
+  const write = recordTelemetry(env.TELEMETRY, event);
+  if (typeof ctx?.waitUntil === "function") ctx.waitUntil(write);
+  return response;
+}
+
 export default {
-  async fetch(request, env = {}) {
+  async fetch(request, env = {}, ctx = {}) {
+    const startedAt = Date.now();
     const url = new URL(request.url);
 
     if (url.pathname === "/health") {
-      return json(200, {
+      return finish(json(200, {
         ok: true,
         service: "evenai-ggc-assistant",
         publicAssistantEnabled: env.ENABLE_PUBLIC_ASSISTANT === "true",
         rateLimiterConfigured: typeof env.RATE_LIMITER?.limit === "function",
-      });
+        telemetryConfigured: typeof env.TELEMETRY?.write === "function",
+      }), "health", startedAt, env, ctx);
     }
 
     if (env.ENABLE_PUBLIC_ASSISTANT !== "true") {
-      return json(503, {
+      return finish(json(503, {
         error: "assistant_unavailable",
         message: "The assistant endpoint is not enabled.",
-      });
+      }), "disabled", startedAt, env, ctx);
     }
 
     const origin = request.headers.get("origin")?.trim() ?? "";
     if (!origin || !allowedOrigins(env).has(origin)) {
-      return json(403, {
+      return finish(json(403, {
         error: "origin_not_allowed",
         message: "This origin is not permitted to access the assistant.",
-      }, { vary: "Origin" });
+      }, { vary: "Origin" }), "origin-rejected", startedAt, env, ctx);
     }
 
     if (request.method === "OPTIONS") {
-      return new Response(null, {
+      return finish(new Response(null, {
         status: 204,
         headers: corsHeaders(origin),
-      });
+      }), "preflight", startedAt, env, ctx);
     }
 
     const rateLimit = await enforceRateLimit(request, env);
     if (!rateLimit.allowed) {
       const status = rateLimit.reason === "rate-limit-exceeded" ? 429 : 503;
-      return withCors(json(status, {
+      const response = withCors(json(status, {
         error: rateLimit.reason,
         message: status === 429
           ? "Too many assistant requests. Try again later."
@@ -91,8 +106,24 @@ export default {
       }, {
         "retry-after": String(rateLimit.retryAfter),
       }), origin);
+      return finish(
+        response,
+        status === 429 ? "rate-limited" : "limiter-unavailable",
+        startedAt,
+        env,
+        ctx,
+        request.headers.get("x-request-id"),
+      );
     }
 
-    return withCors(await handleGgcAssistantRequest(request), origin);
+    const response = withCors(await handleGgcAssistantRequest(request), origin);
+    return finish(
+      response,
+      "assistant-response",
+      startedAt,
+      env,
+      ctx,
+      response.headers.get("x-request-id") ?? request.headers.get("x-request-id"),
+    );
   },
 };
