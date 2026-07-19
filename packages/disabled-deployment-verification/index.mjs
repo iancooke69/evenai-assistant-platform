@@ -53,12 +53,14 @@ function requireDeploymentEvidence(evidence, releaseCommit, deploymentRunId) {
 }
 
 function binding(settings, name) {
+  if (settings?.success !== true) return null;
   const bindings = settings?.result?.bindings;
   if (!Array.isArray(bindings)) return null;
   return bindings.find((candidate) => candidate?.name === name && candidate?.type === "plain_text") ?? null;
 }
 
 function cloudflareDeploymentPresent(deployments) {
+  if (deployments?.success !== true) return false;
   const records = deployments?.result;
   if (!Array.isArray(records) || records.length === 0) return false;
   return records.some((record) => (
@@ -93,7 +95,7 @@ export function verifyDisabledDeployment(input = {}) {
     "cloudflare-deployment": cloudflareDeploymentPresent(input.cloudflareDeployments) ? "pass" : "fail",
     "release-config-disabled": sourceConfigDisabled(input.releaseConfig) ? "pass" : "fail",
     "live-binding-disabled": publicBinding?.text === "false" ? "pass" : "fail",
-    "live-origins-empty": String(originsBinding?.text ?? "").trim() === "" ? "pass" : "fail",
+    "live-origins-empty": originsBinding && String(originsBinding.text ?? "").trim() === "" ? "pass" : "fail",
     "route-not-serving-assistant": routeNotServingAssistant(input.probe) ? "pass" : "fail",
     "cors-not-exposed": input.probe?.corsOrigin == null ? "pass" : "fail",
   });
