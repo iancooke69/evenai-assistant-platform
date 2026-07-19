@@ -10,7 +10,8 @@
     "test:safety": "node --test tests/safety/*.test.mjs",
     "test:conversation": "node --test tests/conversation/*.test.mjs",
     "test:response": "node --test tests/response/*.test.mjs",
-    "test": "npm run validate:knowledge && npm run test:retrieval && npm run test:safety && npm run test:conversation && npm run test:response"
+    "test:runtime": "node --test tests/runtime/*.test.mjs",
+    "test": "npm run validate:knowledge && npm run test:retrieval && npm run test:safety && npm run test:conversation && npm run test:response && npm run test:runtime"
   },
   "engines": {
     "node": ">=20"
