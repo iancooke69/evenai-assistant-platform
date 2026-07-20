@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import {
@@ -10,13 +11,18 @@ import {
   prepareCanaryActivation,
   verifyDisabledVersionDetails,
 } from "../packages/canary-activation/index.mjs";
-import { parseVersionUploadRecord } from "../packages/wrangler-output/index.mjs";
+import {
+  parseVersionUploadRecord,
+  parseWorkerDeployRecord,
+} from "../packages/wrangler-output/index.mjs";
 
 const WORKER_NAME = "evenai-ggc-assistant";
 const PROBE_URL = "https://getgascert.com/api/assistant/v1/assist";
 const OVERRIDE_PROBE_ATTEMPTS = 6;
 const OVERRIDE_PROBE_DELAY_MS = 2000;
 const AFFINITY_PROBE_ATTEMPTS = 256;
+const SERVICE_PROBE_ATTEMPTS = 12;
+const SERVICE_PROBE_DELAY_MS = 1000;
 const PLAN_PATH = "canary-plan.json";
 const SOURCE_DIR = "release-source";
 const DISABLED_CONFIG_PATH = `${SOURCE_DIR}/wrangler.jsonc`;
@@ -72,6 +78,25 @@ async function cloudflare(apiPath) {
     return JSON.parse(body);
   } catch {
     throw new Error(`Cloudflare API ${apiPath} did not return JSON`);
+  }
+}
+
+async function deleteWorkerScript(workerName) {
+  const accountId = required("CLOUDFLARE_ACCOUNT_ID");
+  const token = required("CLOUDFLARE_API_TOKEN");
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${encodeURIComponent(workerName)}`,
+    {
+      method: "DELETE",
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: "application/json",
+      },
+    },
+  );
+  const body = await response.text();
+  if (!response.ok && response.status !== 404) {
+    throw new Error(`Cloudflare temporary probe cleanup failed (${response.status}): ${body.slice(0, 300)}`);
   }
 }
 
@@ -235,6 +260,133 @@ export async function probeCanaryApplication(input = {}) {
   return probe;
 }
 
+function safeProbeName(activationRunId) {
+  const suffix = String(activationRunId ?? "").replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+  return `evenai-ggc-canary-probe-${suffix}`.slice(0, 63).replace(/-+$/g, "");
+}
+
+export function createServiceBindingProbeDefinition(input = {}) {
+  const probeName = nonEmpty(input.probeName, "probeName");
+  const canaryVersionId = nonEmpty(input.canaryVersionId, "canaryVersionId");
+  const probeToken = nonEmpty(input.probeToken, "probeToken");
+  const compatibilityDate = String(input.compatibilityDate ?? "2026-07-20").trim();
+
+  const config = Object.freeze({
+    name: probeName,
+    main: "./worker.mjs",
+    compatibility_date: compatibilityDate,
+    workers_dev: true,
+    preview_urls: false,
+    services: [Object.freeze({ binding: "ASSISTANT", service: WORKER_NAME })],
+    vars: Object.freeze({
+      TARGET_WORKER_NAME: WORKER_NAME,
+      TARGET_VERSION_ID: canaryVersionId,
+      PROBE_TOKEN: probeToken,
+      APPROVED_ORIGIN: APPROVED_ORIGINS[0],
+    }),
+  });
+
+  const source = `export default {
+  async fetch(request, env) {
+    if (request.headers.get("x-evenai-probe-token") !== env.PROBE_TOKEN) {
+      return new Response("Not found", { status: 404 });
+    }
+
+    const headers = new Headers(request.headers);
+    headers.delete("content-length");
+    headers.delete("host");
+    headers.delete("x-evenai-probe-token");
+    headers.set("origin", env.APPROVED_ORIGIN);
+    headers.set("content-type", "application/json");
+    headers.set(
+      "Cloudflare-Workers-Version-Overrides",
+      env.TARGET_WORKER_NAME + '=\"' + env.TARGET_VERSION_ID + '\"',
+    );
+
+    const downstreamRequest = new Request(
+      "https://getgascert.com/api/assistant/v1/assist",
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ message: "Can you help?" }),
+      },
+    );
+    return env.ASSISTANT.fetch(downstreamRequest);
+  },
+};
+`;
+
+  return Object.freeze({ config, source });
+}
+
+export async function probeCanaryThroughServiceBinding(input = {}) {
+  const fetchImpl = typeof input.fetchImpl === "function" ? input.fetchImpl : fetch;
+  const sleepImpl = typeof input.sleepImpl === "function" ? input.sleepImpl : sleep;
+  const canaryVersionId = nonEmpty(input.canaryVersionId, "canaryVersionId");
+  const activationRunId = nonEmpty(input.activationRunId, "activationRunId");
+  const compatibilityDate = String(input.compatibilityDate ?? "2026-07-20").trim();
+  const attempts = positiveInteger(input.attempts ?? SERVICE_PROBE_ATTEMPTS, "attempts");
+  const delayMs = Number.isInteger(input.delayMs) && input.delayMs >= 0
+    ? input.delayMs
+    : SERVICE_PROBE_DELAY_MS;
+  const probeToken = typeof input.probeToken === "string" && input.probeToken.trim()
+    ? input.probeToken.trim()
+    : randomUUID();
+  const probeName = safeProbeName(activationRunId);
+  const directory = path.resolve(`.canary-service-probe-${activationRunId}`);
+  const configPath = path.join(directory, "wrangler.jsonc");
+  const sourcePath = path.join(directory, "worker.mjs");
+  const outputPath = path.join(directory, "deploy-output.ndjson");
+  const definition = createServiceBindingProbeDefinition({
+    probeName,
+    canaryVersionId,
+    probeToken,
+    compatibilityDate,
+  });
+
+  fs.rmSync(directory, { recursive: true, force: true });
+  fs.mkdirSync(directory, { recursive: true });
+  writeJson(configPath, definition.config);
+  fs.writeFileSync(sourcePath, definition.source);
+
+  try {
+    wrangler(["deploy", "--config", configPath], {
+      WRANGLER_OUTPUT_FILE_PATH: outputPath,
+    });
+    const deployRecord = parseWorkerDeployRecord(
+      fs.readFileSync(outputPath, "utf8"),
+      probeName,
+    );
+    const target = deployRecord.targets[0].replace(/\/$/, "");
+    let lastProbe = null;
+
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      const response = await fetchImpl(`${target}/probe`, {
+        method: "GET",
+        headers: { "x-evenai-probe-token": probeToken },
+      });
+      lastProbe = await readProbe(response);
+      console.log(
+        `CANARY_SERVICE_BINDING_PROBE attempt=${attempt}/${attempts} status=${lastProbe.status} service=${lastProbe.service ?? "missing"} version=${lastProbe.versionId ?? "missing"} error=${lastProbe.error ?? "none"}`,
+      );
+      if (lastProbe.service === WORKER_NAME && lastProbe.versionId === canaryVersionId) {
+        return lastProbe;
+      }
+      if (attempt < attempts && delayMs > 0) await sleepImpl(delayMs);
+    }
+
+    throw new Error(
+      `service-binding probe did not reach canary version ${canaryVersionId}; last observed=${lastProbe?.versionId ?? "missing"}`,
+    );
+  } finally {
+    try {
+      await deleteWorkerScript(probeName);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  }
+}
+
 async function activate() {
   required("CLOUDFLARE_API_TOKEN");
   required("CLOUDFLARE_ACCOUNT_ID");
@@ -298,12 +450,23 @@ async function activate() {
   ]);
 
   const deploymentsAfter = await cloudflare("/deployments");
-  const route = await resolveCanaryProbeRoute({ canaryVersionId, activationRunId });
-  console.log(`PASS: selected canary routing using ${route.mode}.`);
-  const probe = await probeCanaryApplication({
-    canaryVersionId,
-    routingHeaders: route.headers,
-  });
+  let probe;
+  try {
+    const route = await resolveCanaryProbeRoute({ canaryVersionId, activationRunId });
+    console.log(`PASS: selected canary routing using ${route.mode}.`);
+    probe = await probeCanaryApplication({
+      canaryVersionId,
+      routingHeaders: route.headers,
+    });
+  } catch (error) {
+    console.log(`INFO: public-route targeting was unavailable (${error.message}); using a temporary protected service-binding probe.`);
+    probe = await probeCanaryThroughServiceBinding({
+      canaryVersionId,
+      activationRunId,
+      compatibilityDate: prepared.canaryConfig.compatibility_date,
+    });
+    console.log("PASS: exact canary application verified through a temporary service binding.");
+  }
 
   const evidence = createCanaryActivationEvidence({
     ...plan,
