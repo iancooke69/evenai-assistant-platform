@@ -19,9 +19,10 @@ function passingVerificationEvidence() {
       "deployment-evidence": "pass",
       "cloudflare-deployment": "pass",
       "release-config-disabled": "pass",
+      "release-route-configured": "pass",
       "live-binding-disabled": "pass",
       "live-origins-empty": "pass",
-      "route-not-serving-assistant": "pass",
+      "live-route-disabled-response": "pass",
       "cors-not-exposed": "pass",
     },
     controls: {
@@ -43,6 +44,14 @@ test("activation workflow performs authorization in the same protected run", () 
   assert.doesNotMatch(workflow, /Discover latest canary authorization/);
   assert.doesNotMatch(workflow, /resolve-canary-authorization-evidence\.mjs/);
   assert.doesNotMatch(workflow, /name: canary-activation-authorization\n\s+path: authorization-evidence/);
+});
+
+test("activation workflow uses Node 24 artifact actions", () => {
+  const workflow = fs.readFileSync(activationWorkflowUrl, "utf8");
+
+  assert.match(workflow, /actions\/download-artifact@v7/);
+  assert.match(workflow, /actions\/upload-artifact@v7/);
+  assert.doesNotMatch(workflow, /actions\/(?:download|upload)-artifact@v[45]/);
 });
 
 test("separate authorization workflow is removed", () => {

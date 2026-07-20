@@ -42,7 +42,7 @@ jobs:
         run: node scripts/resolve-disabled-deployment-evidence.mjs
 
       - name: Download exact disabled deployment evidence
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           name: disabled-worker-deployment-evidence
           path: deployment-evidence
@@ -118,7 +118,7 @@ jobs:
 
       - name: Upload privacy-safe disabled verification evidence
         if: ${{ always() && hashFiles('disabled-deployment-verification-evidence.json') != '' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: disabled-deployment-verification-evidence
           path: disabled-deployment-verification-evidence.json
