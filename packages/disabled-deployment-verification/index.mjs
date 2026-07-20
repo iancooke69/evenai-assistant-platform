@@ -1,12 +1,16 @@
 const FULL_SHA = /^[0-9a-f]{40}$/i;
+const EXPECTED_ROUTE = "getgascert.com/api/assistant/*";
+const EXPECTED_ZONE = "getgascert.com";
+const EXPECTED_SERVICE = "evenai-ggc-assistant";
 
 const REQUIRED_CHECKS = Object.freeze([
   "deployment-evidence",
   "cloudflare-deployment",
   "release-config-disabled",
+  "release-route-configured",
   "live-binding-disabled",
   "live-origins-empty",
-  "route-not-serving-assistant",
+  "live-route-disabled-response",
   "cors-not-exposed",
 ]);
 
@@ -76,11 +80,19 @@ function sourceConfigDisabled(config) {
     && String(config?.vars?.ALLOWED_ORIGINS ?? "").trim() === "";
 }
 
-function routeNotServingAssistant(probe) {
-  return Number.isInteger(probe?.status)
-    && probe.status >= 100
-    && probe.status <= 599
-    && probe.assistantResponse !== true;
+function sourceRouteConfigured(config) {
+  const routes = Array.isArray(config?.routes) ? config.routes : [];
+  return routes.some((route) => (
+    route?.pattern === EXPECTED_ROUTE
+    && route?.zone_name === EXPECTED_ZONE
+  ));
+}
+
+function liveRouteIsDisabledWorker(probe) {
+  return probe?.status === 503
+    && probe?.assistantResponse !== true
+    && probe?.service === EXPECTED_SERVICE
+    && probe?.error === "assistant_unavailable";
 }
 
 export function verifyDisabledDeployment(input = {}) {
@@ -100,9 +112,10 @@ export function verifyDisabledDeployment(input = {}) {
     "deployment-evidence": "pass",
     "cloudflare-deployment": deployedVersionId ? "pass" : "fail",
     "release-config-disabled": sourceConfigDisabled(input.releaseConfig) ? "pass" : "fail",
+    "release-route-configured": sourceRouteConfigured(input.releaseConfig) ? "pass" : "fail",
     "live-binding-disabled": publicBinding?.text === "false" ? "pass" : "fail",
     "live-origins-empty": originsBinding && String(originsBinding.text ?? "").trim() === "" ? "pass" : "fail",
-    "route-not-serving-assistant": routeNotServingAssistant(input.probe) ? "pass" : "fail",
+    "live-route-disabled-response": liveRouteIsDisabledWorker(input.probe) ? "pass" : "fail",
     "cors-not-exposed": input.probe?.corsOrigin == null ? "pass" : "fail",
   });
 
