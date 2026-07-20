@@ -1,13 +1,14 @@
 import fs from "node:fs";
+import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import {
   APPROVED_ORIGINS,
   createCanaryActivationEvidence,
   createCanaryRollbackEvidence,
-  locateCanaryVersion,
   prepareCanaryActivation,
 } from "../packages/canary-activation/index.mjs";
+import { parseVersionUploadRecord } from "../packages/wrangler-output/index.mjs";
 
 const WORKER_NAME = "evenai-ggc-assistant";
 const PROBE_URL = "https://getgascert.com/api/assistant/v1/assist";
@@ -16,6 +17,7 @@ const SOURCE_DIR = "release-source";
 const CANARY_CONFIG_PATH = `${SOURCE_DIR}/wrangler.canary.jsonc`;
 const ACTIVATION_EVIDENCE_PATH = "canary-activation-evidence.json";
 const ROLLBACK_EVIDENCE_PATH = "canary-rollback-evidence.json";
+const WRANGLER_OUTPUT_PATH = path.resolve("wrangler-version-upload.ndjson");
 
 function required(name) {
   const value = String(process.env[name] ?? "").trim();
@@ -23,22 +25,22 @@ function required(name) {
   return value;
 }
 
-function readJson(path, label = path) {
+function readJson(filePath, label = filePath) {
   try {
-    return JSON.parse(fs.readFileSync(path, "utf8"));
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
   } catch (error) {
     throw new Error(`Unable to read ${label}: ${error.message}`);
   }
 }
 
-function writeJson(path, value) {
-  fs.writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
+function writeJson(filePath, value) {
+  fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-function run(command, args) {
+function run(command, args, environment = {}) {
   const result = spawnSync(command, args, {
     cwd: process.cwd(),
-    env: process.env,
+    env: { ...process.env, ...environment },
     encoding: "utf8",
     stdio: "inherit",
   });
@@ -46,11 +48,11 @@ function run(command, args) {
   if (result.status !== 0) throw new Error(`${command} failed with exit code ${result.status}`);
 }
 
-async function cloudflare(path) {
+async function cloudflare(apiPath) {
   const accountId = required("CLOUDFLARE_ACCOUNT_ID");
   const token = required("CLOUDFLARE_API_TOKEN");
   const response = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${WORKER_NAME}${path}`,
+    `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${WORKER_NAME}${apiPath}`,
     {
       headers: {
         authorization: `Bearer ${token}`,
@@ -59,16 +61,16 @@ async function cloudflare(path) {
     },
   );
   const body = await response.text();
-  if (!response.ok) throw new Error(`Cloudflare API ${path} failed (${response.status}): ${body.slice(0, 300)}`);
+  if (!response.ok) throw new Error(`Cloudflare API ${apiPath} failed (${response.status}): ${body.slice(0, 300)}`);
   try {
     return JSON.parse(body);
   } catch {
-    throw new Error(`Cloudflare API ${path} did not return JSON`);
+    throw new Error(`Cloudflare API ${apiPath} did not return JSON`);
   }
 }
 
-function wrangler(args) {
-  run("npx", ["--yes", "wrangler@4", ...args]);
+function wrangler(args, environment = {}) {
+  run("npx", ["--yes", "wrangler@4", ...args], environment);
 }
 
 function materializeRelease(releaseCommit) {
@@ -128,15 +130,21 @@ async function activate() {
   };
   writeJson(PLAN_PATH, plan);
 
+  if (fs.existsSync(WRANGLER_OUTPUT_PATH)) fs.rmSync(WRANGLER_OUTPUT_PATH, { force: true });
   wrangler([
     "versions", "upload",
     "--config", CANARY_CONFIG_PATH,
     "--tag", prepared.canaryTag,
     "--message", `Authorized bounded canary run ${activationRunId}`,
-  ]);
+  ], {
+    WRANGLER_OUTPUT_FILE_PATH: WRANGLER_OUTPUT_PATH,
+  });
 
-  const versions = await cloudflare("/versions?per_page=100");
-  const canaryVersionId = locateCanaryVersion(versions, prepared.canaryTag);
+  const uploadRecord = parseVersionUploadRecord(
+    fs.readFileSync(WRANGLER_OUTPUT_PATH, "utf8"),
+    WORKER_NAME,
+  );
+  const canaryVersionId = uploadRecord.versionId;
   plan.canaryVersionId = canaryVersionId;
   writeJson(PLAN_PATH, plan);
 
