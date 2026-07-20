@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       release_gate_run_id:
-        description: Successful Manual release gate workflow run ID
+        description: Successful Manual release gate workflow run ID or full Actions run URL
         required: true
         type: string
 
@@ -17,8 +17,6 @@ permissions:
   actions: read
 
 env:
-  RELEASE_COMMIT: ${{ inputs.release_commit }}
-  RELEASE_GATE_RUN_ID: ${{ inputs.release_gate_run_id }}
   RELEASE_GATE_EVIDENCE_PATH: release-gate/manual-release-gate-evidence.json
   DEPLOYMENT_EVIDENCE_PATH: disabled-deployment-evidence.json
 
@@ -30,22 +28,35 @@ jobs:
     environment: production-disabled
 
     steps:
-      - name: Check out exact release commit
+      - name: Check out deployment control plane
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.release_commit }}
+          ref: main
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 24
 
+      - name: Normalize and validate deployment inputs
+        id: inputs
+        env:
+          RAW_RELEASE_COMMIT: ${{ inputs.release_commit }}
+          RAW_RELEASE_GATE_RUN_ID: ${{ inputs.release_gate_run_id }}
+        run: node scripts/disabled-worker-deployment.mjs --normalize-inputs
+
+      - name: Check out exact normalized release commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.inputs.outputs.release_commit }}
+
       - name: Download release-gate evidence
         uses: actions/download-artifact@v5
         with:
           name: manual-release-gate-evidence
           path: release-gate
-          run-id: ${{ inputs.release_gate_run_id }}
+          run-id: ${{ steps.inputs.outputs.release_gate_run_id }}
           repository: ${{ github.repository }}
           github-token: ${{ github.token }}
 
