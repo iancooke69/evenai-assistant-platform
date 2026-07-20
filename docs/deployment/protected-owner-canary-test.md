@@ -41,6 +41,12 @@ The browser page requires a private bearer token. The token:
 
 The deployed page can be viewed without the token, but assistant requests fail with HTTP 401 until the correct token is supplied.
 
+## Rate-limit identity
+
+The assistant rate limiter requires a client identity. The gateway therefore reads Cloudflare's incoming `CF-Connecting-IP` value and forwards that identity on the internal service-binding request using `X-Real-IP` and `CF-Connecting-IP`.
+
+The owner bearer token is never forwarded to the assistant Worker. If Cloudflare does not supply a client identity, the gateway fails closed before calling the assistant.
+
 ## Operation
 
 From GitHub Actions, run `Manage protected owner canary test` and select:
@@ -60,6 +66,7 @@ The gateway:
 - fails closed if canary bindings or approved origins differ;
 - fails closed if the downstream response is not from the exact canary version;
 - preserves the assistant's existing rate limiter and telemetry path;
+- forwards only Cloudflare's client identity, not the owner token;
 - uses `Cache-Control: no-store` and restrictive browser security headers.
 
 Remove the gateway after owner testing. Removing it does not change the production assistant deployment.
