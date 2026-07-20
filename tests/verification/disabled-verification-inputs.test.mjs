@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import {
   normalizeDeploymentRunId,
   normalizeDisabledDeploymentInputs,
@@ -54,4 +55,16 @@ test("rejects workflow display numbers and ambiguous run values", () => {
     () => normalizeDeploymentRunId("run 123456 and run 456789"),
     /positive numeric run ID/,
   );
+});
+
+test("disabled deployment workflow never passes raw user text to Git", () => {
+  const workflow = fs.readFileSync(".github/workflows/deploy-disabled-worker.yml", "utf8");
+  const normalizeIndex = workflow.indexOf("Normalize and validate deployment inputs");
+  const checkoutIndex = workflow.indexOf("Check out exact normalized release commit");
+
+  assert.ok(normalizeIndex >= 0);
+  assert.ok(checkoutIndex > normalizeIndex);
+  assert.doesNotMatch(workflow, /ref:\s*\$\{\{\s*inputs\.release_commit\s*\}\}/);
+  assert.match(workflow, /git checkout --detach \"\$NORMALIZED_RELEASE_COMMIT\"/);
+  assert.match(workflow, /run-id:\s*\$\{\{ steps\.normalized\.outputs\.release_gate_run_id \}\}/);
 });
