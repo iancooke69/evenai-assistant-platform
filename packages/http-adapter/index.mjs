@@ -25,12 +25,24 @@ function requestId(request) {
   return supplied && supplied.length <= 128 ? supplied : generatedRequestId();
 }
 
+function acceptedRoutes(options) {
+  const configured = options.routes ?? options.route ?? "/v1/assist";
+  const values = Array.isArray(configured) ? configured : [configured];
+  if (
+    values.length === 0
+    || values.some((value) => typeof value !== "string" || !value.startsWith("/"))
+  ) {
+    throw new TypeError("route or routes must contain one or more absolute paths");
+  }
+  return new Set(values);
+}
+
 export function createAssistantHttpHandler(options = {}) {
   if (typeof options.assistant !== "function") {
     throw new TypeError("assistant must be a function");
   }
 
-  const route = options.route ?? "/v1/assist";
+  const routes = acceptedRoutes(options);
   const maximumInputLength = Number.isInteger(options.maximumInputLength)
     ? options.maximumInputLength
     : 2000;
@@ -39,7 +51,7 @@ export function createAssistantHttpHandler(options = {}) {
     const id = requestId(request);
     const url = new URL(request.url);
 
-    if (url.pathname !== route) {
+    if (!routes.has(url.pathname)) {
       return json(404, { error: "not-found", requestId: id });
     }
 
