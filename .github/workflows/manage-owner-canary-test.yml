@@ -38,7 +38,7 @@ jobs:
           node-version: 24
 
       - name: Run full repository test suite
-        run: npm test
+        run: GITHUB_STEP_SUMMARY= GITHUB_OUTPUT= npm test
 
       - name: Deploy gateway pinned to the exact active canary
         if: inputs.action == 'deploy'
