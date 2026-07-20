@@ -19,9 +19,10 @@ function passingVerificationEvidence() {
       "deployment-evidence": "pass",
       "cloudflare-deployment": "pass",
       "release-config-disabled": "pass",
+      "release-route-configured": "pass",
       "live-binding-disabled": "pass",
       "live-origins-empty": "pass",
-      "route-not-serving-assistant": "pass",
+      "live-route-disabled-response": "pass",
       "cors-not-exposed": "pass",
     },
     controls: {
