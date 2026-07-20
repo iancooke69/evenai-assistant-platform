@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "decision": "ggc-full-rollout-repair-authorized",
+  "authorizedBy": "Ian Cooke",
+  "authorizedAt": "2026-07-20",
+  "targetWorker": "evenai-ggc-assistant",
+  "requiredStartingState": "one-disabled-version-at-100-percent",
+  "targetExposurePercent": 100,
+  "rollbackToCurrentDisabledVersionRequired": true,
+  "automaticPromotionAuthorized": false,
+  "rationale": "The owner confirmed that the live website still receives assistant_unavailable after the prior 100 percent promotion. Upload a fresh version with explicit enabled bindings, deploy it at 100 percent, verify the public route, and restore the current disabled version on any failure."
+}
