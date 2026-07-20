@@ -1,0 +1,55 @@
+name: Manage protected owner canary test
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Deploy or remove the private owner canary test gateway
+        required: true
+        default: deploy
+        type: choice
+        options:
+          - deploy
+          - remove
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evenai-ggc-owner-canary-test
+  cancel-in-progress: false
+
+jobs:
+  manage-owner-test:
+    name: Manage protected owner test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production-disabled
+
+    steps:
+      - name: Check out current control plane
+        uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Run full repository test suite
+        run: npm test
+
+      - name: Deploy gateway pinned to the exact active canary
+        if: inputs.action == 'deploy'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/manage-owner-canary-test.mjs --deploy
+
+      - name: Remove protected owner gateway
+        if: inputs.action == 'remove'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/manage-owner-canary-test.mjs --remove
