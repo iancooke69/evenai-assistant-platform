@@ -2,6 +2,8 @@ import { enforceRateLimit } from "../../packages/rate-limit-policy/index.mjs";
 import { createTelemetryEvent, recordTelemetry } from "../../packages/telemetry-policy/index.mjs";
 import { handleGgcAssistantRequest } from "./http.mjs";
 
+const SERVICE_NAME = "evenai-ggc-assistant";
+
 function json(status, body, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
@@ -46,16 +48,31 @@ function withCors(response, origin) {
   });
 }
 
+function withOperationalIdentity(response, env = {}) {
+  const headers = new Headers(response.headers);
+  headers.set("x-evenai-service", SERVICE_NAME);
+
+  const versionId = String(env.CF_VERSION_METADATA?.id ?? "").trim();
+  if (versionId) headers.set("x-evenai-version-id", versionId);
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function finish(response, outcome, startedAt, env, ctx, requestId = null) {
+  const identifiedResponse = withOperationalIdentity(response, env);
   const event = createTelemetryEvent({
     outcome,
-    status: response.status,
+    status: identifiedResponse.status,
     durationMs: Date.now() - startedAt,
     requestId,
   });
   const write = recordTelemetry(env.TELEMETRY, event);
   if (typeof ctx?.waitUntil === "function") ctx.waitUntil(write);
-  return response;
+  return identifiedResponse;
 }
 
 export default {
@@ -66,7 +83,7 @@ export default {
     if (url.pathname === "/health") {
       return finish(json(200, {
         ok: true,
-        service: "evenai-ggc-assistant",
+        service: SERVICE_NAME,
         publicAssistantEnabled: env.ENABLE_PUBLIC_ASSISTANT === "true",
         rateLimiterConfigured: typeof env.RATE_LIMITER?.limit === "function",
         telemetryConfigured: typeof env.TELEMETRY?.write === "function",
