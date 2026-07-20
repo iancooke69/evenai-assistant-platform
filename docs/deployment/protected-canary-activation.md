@@ -34,10 +34,13 @@ The exact authorized release source is materialized from Git history. The canary
 After the split is created, the workflow:
 
 1. reads the active Cloudflare deployment and requires the exact 95/5 split;
-2. targets the canary version using Cloudflare's version-override header;
-3. sends an allowed-origin application request;
-4. requires HTTP 200, the approved CORS origin, and an assistant result;
-5. writes the privacy-safe `canary-activation-evidence` artifact.
+2. attempts to route an `OPTIONS` probe directly to the canary with Cloudflare's version-override header;
+3. if the override is not applied, searches bounded privacy-safe version-affinity keys against the live 5% split until one is confirmed twice on the exact canary version;
+4. uses the same override or affinity key for one allowed-origin application request;
+5. requires the application request to remain on the exact canary version and return HTTP 200, the approved CORS origin, and an assistant result;
+6. writes the privacy-safe `canary-activation-evidence` artifact.
+
+The routing probes use `OPTIONS`, which is handled before rate limiting and before assistant execution. They therefore validate routing without consuming the application rate-limit allowance or generating assistant responses. The final application check remains mandatory.
 
 ## Fail-closed rollback
 
