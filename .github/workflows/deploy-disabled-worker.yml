@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       release_commit:
-        description: Full 40-character release commit SHA authorized by the release gate
+        description: Full release SHA or text containing exactly one full SHA
         required: true
         type: string
       release_gate_run_id:
-        description: Successful Manual release gate workflow run ID
+        description: Release-gate run ID, labelled run ID, or full Actions run URL
         required: true
         type: string
 
@@ -17,8 +17,6 @@ permissions:
   actions: read
 
 env:
-  RELEASE_COMMIT: ${{ inputs.release_commit }}
-  RELEASE_GATE_RUN_ID: ${{ inputs.release_gate_run_id }}
   RELEASE_GATE_EVIDENCE_PATH: release-gate/manual-release-gate-evidence.json
   DEPLOYMENT_EVIDENCE_PATH: disabled-deployment-evidence.json
 
@@ -30,22 +28,41 @@ jobs:
     environment: production-disabled
 
     steps:
-      - name: Check out exact release commit
+      - name: Check out deployment control plane and full history
         uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.release_commit }}
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 24
 
+      - name: Normalize and validate deployment inputs
+        id: normalized
+        env:
+          RAW_RELEASE_COMMIT: ${{ inputs.release_commit }}
+          RAW_RELEASE_GATE_RUN_ID: ${{ inputs.release_gate_run_id }}
+        run: node scripts/normalize-disabled-verification-inputs.mjs
+
+      - name: Check out exact normalized release commit
+        env:
+          NORMALIZED_RELEASE_COMMIT: ${{ steps.normalized.outputs.release_commit }}
+          NORMALIZED_RELEASE_GATE_RUN_ID: ${{ steps.normalized.outputs.release_gate_run_id }}
+        run: |
+          set -euo pipefail
+          git cat-file -e "${NORMALIZED_RELEASE_COMMIT}^{commit}"
+          git checkout --detach "$NORMALIZED_RELEASE_COMMIT"
+          test "$(git rev-parse HEAD)" = "$NORMALIZED_RELEASE_COMMIT"
+          echo "RELEASE_COMMIT=$NORMALIZED_RELEASE_COMMIT" >> "$GITHUB_ENV"
+          echo "RELEASE_GATE_RUN_ID=$NORMALIZED_RELEASE_GATE_RUN_ID" >> "$GITHUB_ENV"
+
       - name: Download release-gate evidence
         uses: actions/download-artifact@v5
         with:
           name: manual-release-gate-evidence
           path: release-gate
-          run-id: ${{ inputs.release_gate_run_id }}
+          run-id: ${{ steps.normalized.outputs.release_gate_run_id }}
           repository: ${{ github.repository }}
           github-token: ${{ github.token }}
 
