@@ -14,6 +14,11 @@ import {
 const releaseCommit = "a".repeat(40);
 const stableVersionId = "11111111-1111-4111-8111-111111111111";
 const canaryVersionId = "22222222-2222-4222-8222-222222222222";
+const successfulProbe = {
+  status: 200,
+  corsOrigin: "https://getgascert.com",
+  body: JSON.stringify({ result: { answer: "ok" } }),
+};
 
 function authorization() {
   return {
@@ -138,13 +143,18 @@ test("verifies only the exact 95/5 deployment split", () => {
   assert.throws(() => verifyCanaryDeployment(deployment, stableVersionId, canaryVersionId), /fixed at 5/);
 });
 
-test("targeted probe must show enabled origin-protected behavior", () => {
-  assert.equal(verifyCanaryProbe({ status: 404, corsOrigin: APPROVED_ORIGINS[0], body: "not found" }), true);
+test("targeted probe must return a successful assistant response", () => {
+  assert.equal(verifyCanaryProbe(successfulProbe), true);
   assert.throws(() => verifyCanaryProbe({
     status: 503,
     corsOrigin: null,
     body: JSON.stringify({ error: "assistant_unavailable" }),
-  }), /did not reach an enabled/);
+  }), /did not return HTTP 200/);
+  assert.throws(() => verifyCanaryProbe({
+    status: 200,
+    corsOrigin: APPROVED_ORIGINS[0],
+    body: JSON.stringify({ error: "assistant-failure" }),
+  }), /did not return an assistant result/);
 });
 
 test("activation and rollback evidence never authorize full public release", () => {
@@ -168,7 +178,7 @@ test("activation and rollback evidence never authorize full public release", () 
     stableVersionId,
     canaryVersionId,
     cloudflareDeployments,
-    probe: { status: 404, corsOrigin: APPROVED_ORIGINS[0], body: "not found" },
+    probe: successfulProbe,
   });
   assert.equal(evidence.exposure.canaryPercent, 5);
   assert.equal(evidence.observation.automaticPromotion, false);
