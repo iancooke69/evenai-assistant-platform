@@ -154,6 +154,11 @@ async function ownerAuthorized(request, env) {
   return constantTimeEqual(suppliedHash, String(env.OWNER_TOKEN_SHA256 ?? "").toLowerCase());
 }
 
+function clientAddress(request) {
+  const value = request.headers.get("cf-connecting-ip")?.trim() ?? "";
+  return value && value.length <= 64 ? value : null;
+}
+
 function requiredEnvironment(env) {
   for (const name of [
     "TARGET_WORKER_NAME",
@@ -196,6 +201,14 @@ export function createOwnerCanaryTestWorker() {
         }, { "www-authenticate": "Bearer realm=\"GetGasCert protected canary\"" });
       }
 
+      const connectingIp = clientAddress(request);
+      if (!connectingIp) {
+        return json(503, {
+          error: "client_identity_unavailable",
+          message: "The protected gateway could not establish a client identity for rate limiting.",
+        });
+      }
+
       let payload;
       try {
         payload = await request.json();
@@ -218,6 +231,8 @@ export function createOwnerCanaryTestWorker() {
           origin: env.APPROVED_ORIGIN,
           "content-type": "application/json",
           "x-request-id": requestId,
+          "x-real-ip": connectingIp,
+          "cf-connecting-ip": connectingIp,
           "Cloudflare-Workers-Version-Overrides":
             `${env.TARGET_WORKER_NAME}=\"${env.TARGET_VERSION_ID}\"`,
         },
