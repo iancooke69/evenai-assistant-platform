@@ -1,0 +1,101 @@
+name: Activate protected 5 percent canary
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: evenai-ggc-production-canary
+  cancel-in-progress: false
+
+jobs:
+  activate-canary:
+    name: Activate bounded canary
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production-disabled
+
+    steps:
+      - name: Check out control plane and release history
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Discover latest disabled deployment
+        id: deployment
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/resolve-disabled-deployment-evidence.mjs
+
+      - name: Discover latest canary authorization
+        id: authorization
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/resolve-canary-authorization-evidence.mjs
+
+      - name: Download exact canary authorization
+        uses: actions/download-artifact@v5
+        with:
+          name: canary-activation-authorization
+          path: authorization-evidence
+          run-id: ${{ steps.authorization.outputs.authorization_run_id }}
+          repository: ${{ github.repository }}
+          github-token: ${{ github.token }}
+
+      - name: Validate authorization against latest disabled deployment
+        id: evidence
+        env:
+          CANARY_AUTHORIZATION_PATH: authorization-evidence/canary-activation-authorization.json
+          LATEST_DEPLOYMENT_RUN_ID: ${{ steps.deployment.outputs.deployment_run_id }}
+          AUTHORIZATION_RUN_ID: ${{ steps.authorization.outputs.authorization_run_id }}
+        run: node scripts/resolve-canary-authorization-evidence.mjs --read-evidence
+
+      - name: Run full repository test suite
+        run: npm test
+
+      - name: Execute protected canary activation
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RELEASE_COMMIT: ${{ steps.evidence.outputs.release_commit }}
+          LATEST_DEPLOYMENT_RUN_ID: ${{ steps.deployment.outputs.deployment_run_id }}
+          AUTHORIZATION_RUN_ID: ${{ steps.authorization.outputs.authorization_run_id }}
+          ACTIVATION_RUN_ID: ${{ github.run_id }}
+          CANARY_AUTHORIZATION_PATH: authorization-evidence/canary-activation-authorization.json
+        run: node scripts/execute-canary-activation.mjs --activate
+
+      - name: Upload canary activation evidence
+        if: ${{ success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-activation-evidence
+          path: canary-activation-evidence.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Restore disabled stable version after failure
+        if: ${{ failure() && hashFiles('canary-plan.json') != '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ACTIVATION_RUN_ID: ${{ github.run_id }}
+        run: node scripts/execute-canary-activation.mjs --rollback
+
+      - name: Upload rollback evidence
+        if: ${{ always() && hashFiles('canary-rollback-evidence.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-rollback-evidence
+          path: canary-rollback-evidence.json
+          if-no-files-found: error
+          retention-days: 30
