@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "decision": "ggc-full-rollout-authorized",
+  "authorizedBy": "Ian Cooke",
+  "authorizedAt": "2026-07-20",
+  "targetWorker": "evenai-ggc-assistant",
+  "requiredStartingAllocation": "95-disabled-5-enabled",
+  "targetExposurePercent": 100,
+  "ownerConfirmedNoExpectedPublicTraffic": true,
+  "rollbackToDisabledStableRequired": true,
+  "automaticPromotionAuthorized": false,
+  "rationale": "The owner explicitly requested immediate 100 percent exposure so the assistant can be tested on the live website before the site has an active audience."
+}
