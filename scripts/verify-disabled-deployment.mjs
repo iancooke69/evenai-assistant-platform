@@ -71,9 +71,9 @@ const cloudflareDeployments = readJson(
   process.env.CLOUDFLARE_DEPLOYMENTS_PATH ?? "cloudflare-deployments.json",
   "Cloudflare deployments response",
 );
-const cloudflareSettings = readJson(
-  process.env.CLOUDFLARE_SETTINGS_PATH ?? "cloudflare-settings.json",
-  "Cloudflare settings response",
+const cloudflareVersionDetails = readJson(
+  process.env.CLOUDFLARE_VERSION_DETAILS_PATH ?? "cloudflare-version-details.json",
+  "Cloudflare active version details response",
 );
 const probe = await probeProductionRoute(process.env.PRODUCTION_PROBE_URL);
 
@@ -83,7 +83,7 @@ const evidence = verifyDisabledDeployment({
   deploymentEvidence,
   releaseConfig,
   cloudflareDeployments,
-  cloudflareSettings,
+  cloudflareVersionDetails,
   probe,
 });
 
