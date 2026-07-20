@@ -14,8 +14,9 @@ import { parseVersionUploadRecord } from "../packages/wrangler-output/index.mjs"
 
 const WORKER_NAME = "evenai-ggc-assistant";
 const PROBE_URL = "https://getgascert.com/api/assistant/v1/assist";
-const PROBE_ATTEMPTS = 12;
-const PROBE_DELAY_MS = 2000;
+const OVERRIDE_PROBE_ATTEMPTS = 6;
+const OVERRIDE_PROBE_DELAY_MS = 2000;
+const AFFINITY_PROBE_ATTEMPTS = 256;
 const PLAN_PATH = "canary-plan.json";
 const SOURCE_DIR = "release-source";
 const DISABLED_CONFIG_PATH = `${SOURCE_DIR}/wrangler.jsonc`;
@@ -88,49 +89,148 @@ function sleep(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function probeOnce(canaryVersionId) {
-  const response = await fetch(PROBE_URL, {
-    method: "POST",
-    headers: {
-      origin: APPROVED_ORIGINS[0],
-      "content-type": "application/json",
-      "Cloudflare-Workers-Version-Overrides": `${WORKER_NAME}="${canaryVersionId}"`,
-    },
-    body: JSON.stringify({ message: "Can you help?" }),
-  });
+function positiveInteger(value, name) {
+  if (!Number.isInteger(value) || value <= 0) throw new TypeError(`${name} must be a positive integer`);
+  return value;
+}
+
+function nonEmpty(value, name) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) throw new TypeError(`${name} is required`);
+  return normalized;
+}
+
+async function readProbe(response) {
   const body = (await response.text()).slice(0, 2000);
-  let error = null;
+  let parsed = null;
   try {
-    const parsed = JSON.parse(body);
-    error = typeof parsed?.error === "string" ? parsed.error : null;
+    parsed = body ? JSON.parse(body) : null;
   } catch {
-    error = null;
+    parsed = null;
   }
-  return {
+  return Object.freeze({
     status: response.status,
     corsOrigin: response.headers.get("access-control-allow-origin"),
     service: response.headers.get("x-evenai-service"),
     versionId: response.headers.get("x-evenai-version-id"),
-    error,
+    error: typeof parsed?.error === "string" ? parsed.error : null,
     body,
-  };
+  });
 }
 
-async function targetedProbe(canaryVersionId) {
-  let probe = null;
-  for (let attempt = 1; attempt <= PROBE_ATTEMPTS; attempt += 1) {
-    probe = await probeOnce(canaryVersionId);
-    console.log(
-      `CANARY_PROBE attempt=${attempt}/${PROBE_ATTEMPTS} status=${probe.status} service=${probe.service ?? "missing"} version=${probe.versionId ?? "missing"} error=${probe.error ?? "none"}`,
-    );
-    if (
-      probe.status === 200
-      && probe.service === WORKER_NAME
-      && probe.versionId === canaryVersionId
-    ) {
-      return probe;
+function versionOverrideHeader(canaryVersionId) {
+  return `${WORKER_NAME}="${canaryVersionId}"`;
+}
+
+async function routingProbe(fetchImpl, routingHeaders) {
+  const response = await fetchImpl(PROBE_URL, {
+    method: "OPTIONS",
+    headers: {
+      origin: APPROVED_ORIGINS[0],
+      ...routingHeaders,
+    },
+  });
+  return readProbe(response);
+}
+
+function isCanaryRoutingProbe(probe, canaryVersionId) {
+  return probe?.status === 204
+    && probe?.service === WORKER_NAME
+    && probe?.versionId === canaryVersionId;
+}
+
+function logRoutingProbe(prefix, attempt, total, probe) {
+  console.log(
+    `${prefix} attempt=${attempt}/${total} status=${probe.status} service=${probe.service ?? "missing"} version=${probe.versionId ?? "missing"} error=${probe.error ?? "none"}`,
+  );
+}
+
+export async function resolveCanaryProbeRoute(input = {}) {
+  const fetchImpl = typeof input.fetchImpl === "function" ? input.fetchImpl : fetch;
+  const sleepImpl = typeof input.sleepImpl === "function" ? input.sleepImpl : sleep;
+  const canaryVersionId = nonEmpty(input.canaryVersionId, "canaryVersionId");
+  const activationRunId = nonEmpty(input.activationRunId, "activationRunId");
+  const overrideAttempts = positiveInteger(
+    input.overrideAttempts ?? OVERRIDE_PROBE_ATTEMPTS,
+    "overrideAttempts",
+  );
+  const affinityAttempts = positiveInteger(
+    input.affinityAttempts ?? AFFINITY_PROBE_ATTEMPTS,
+    "affinityAttempts",
+  );
+  const overrideDelayMs = Number.isInteger(input.overrideDelayMs) && input.overrideDelayMs >= 0
+    ? input.overrideDelayMs
+    : OVERRIDE_PROBE_DELAY_MS;
+
+  const overrideHeaders = Object.freeze({
+    "Cloudflare-Workers-Version-Overrides": versionOverrideHeader(canaryVersionId),
+  });
+  let lastProbe = null;
+
+  for (let attempt = 1; attempt <= overrideAttempts; attempt += 1) {
+    lastProbe = await routingProbe(fetchImpl, overrideHeaders);
+    logRoutingProbe("CANARY_OVERRIDE_PROBE", attempt, overrideAttempts, lastProbe);
+    if (isCanaryRoutingProbe(lastProbe, canaryVersionId)) {
+      return Object.freeze({ mode: "version-override", headers: overrideHeaders, probe: lastProbe });
     }
-    if (attempt < PROBE_ATTEMPTS) await sleep(PROBE_DELAY_MS);
+    if (attempt < overrideAttempts && overrideDelayMs > 0) await sleepImpl(overrideDelayMs);
+  }
+
+  console.log("INFO: version override did not select the canary; checking the live 5 percent split with deterministic version-affinity keys.");
+
+  for (let attempt = 1; attempt <= affinityAttempts; attempt += 1) {
+    const affinityKey = `canary-probe-${activationRunId}-${attempt}`;
+    const affinityHeaders = Object.freeze({
+      "Cloudflare-Workers-Version-Key": affinityKey,
+    });
+    const probe = await routingProbe(fetchImpl, affinityHeaders);
+
+    if (attempt === 1 || attempt % 32 === 0 || isCanaryRoutingProbe(probe, canaryVersionId)) {
+      logRoutingProbe("CANARY_AFFINITY_PROBE", attempt, affinityAttempts, probe);
+    }
+
+    if (!isCanaryRoutingProbe(probe, canaryVersionId)) {
+      lastProbe = probe;
+      continue;
+    }
+
+    const confirmation = await routingProbe(fetchImpl, affinityHeaders);
+    logRoutingProbe("CANARY_AFFINITY_CONFIRM", attempt, affinityAttempts, confirmation);
+    if (isCanaryRoutingProbe(confirmation, canaryVersionId)) {
+      return Object.freeze({ mode: "version-affinity", headers: affinityHeaders, probe: confirmation });
+    }
+    lastProbe = confirmation;
+  }
+
+  throw new Error(
+    `unable to route a protected probe to canary version ${canaryVersionId}; last observed=${lastProbe?.versionId ?? "missing"}`,
+  );
+}
+
+export async function probeCanaryApplication(input = {}) {
+  const fetchImpl = typeof input.fetchImpl === "function" ? input.fetchImpl : fetch;
+  const canaryVersionId = nonEmpty(input.canaryVersionId, "canaryVersionId");
+  const routingHeaders = input.routingHeaders && typeof input.routingHeaders === "object"
+    ? input.routingHeaders
+    : {};
+  const response = await fetchImpl(PROBE_URL, {
+    method: "POST",
+    headers: {
+      origin: APPROVED_ORIGINS[0],
+      "content-type": "application/json",
+      ...routingHeaders,
+    },
+    body: JSON.stringify({ message: "Can you help?" }),
+  });
+  const probe = await readProbe(response);
+  console.log(
+    `CANARY_APPLICATION_PROBE status=${probe.status} service=${probe.service ?? "missing"} version=${probe.versionId ?? "missing"} error=${probe.error ?? "none"}`,
+  );
+  if (probe.service !== WORKER_NAME) {
+    throw new Error(`canary application probe did not reach ${WORKER_NAME}; status=${probe.status}`);
+  }
+  if (probe.versionId !== canaryVersionId) {
+    throw new Error(`canary application probe changed version; observed=${probe.versionId ?? "missing"}`);
   }
   return probe;
 }
@@ -198,13 +298,12 @@ async function activate() {
   ]);
 
   const deploymentsAfter = await cloudflare("/deployments");
-  const probe = await targetedProbe(canaryVersionId);
-  if (probe?.service !== WORKER_NAME) {
-    throw new Error(`targeted canary probe did not reach ${WORKER_NAME}; status=${probe?.status ?? "unknown"}`);
-  }
-  if (probe?.versionId !== canaryVersionId) {
-    throw new Error(`targeted canary version override was not applied; observed=${probe?.versionId ?? "missing"}`);
-  }
+  const route = await resolveCanaryProbeRoute({ canaryVersionId, activationRunId });
+  console.log(`PASS: selected canary routing using ${route.mode}.`);
+  const probe = await probeCanaryApplication({
+    canaryVersionId,
+    routingHeaders: route.headers,
+  });
 
   const evidence = createCanaryActivationEvidence({
     ...plan,
