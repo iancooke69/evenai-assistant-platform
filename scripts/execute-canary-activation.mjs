@@ -14,6 +14,8 @@ import { parseVersionUploadRecord } from "../packages/wrangler-output/index.mjs"
 
 const WORKER_NAME = "evenai-ggc-assistant";
 const PROBE_URL = "https://getgascert.com/api/assistant/v1/assist";
+const PROBE_ATTEMPTS = 12;
+const PROBE_DELAY_MS = 2000;
 const PLAN_PATH = "canary-plan.json";
 const SOURCE_DIR = "release-source";
 const DISABLED_CONFIG_PATH = `${SOURCE_DIR}/wrangler.jsonc`;
@@ -82,7 +84,11 @@ function materializeRelease(releaseCommit) {
   run("git", ["worktree", "add", "--detach", SOURCE_DIR, releaseCommit]);
 }
 
-async function targetedProbe(canaryVersionId) {
+function sleep(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function probeOnce(canaryVersionId) {
   const response = await fetch(PROBE_URL, {
     method: "POST",
     headers: {
@@ -92,11 +98,41 @@ async function targetedProbe(canaryVersionId) {
     },
     body: JSON.stringify({ message: "Can you help?" }),
   });
+  const body = (await response.text()).slice(0, 2000);
+  let error = null;
+  try {
+    const parsed = JSON.parse(body);
+    error = typeof parsed?.error === "string" ? parsed.error : null;
+  } catch {
+    error = null;
+  }
   return {
     status: response.status,
     corsOrigin: response.headers.get("access-control-allow-origin"),
-    body: (await response.text()).slice(0, 2000),
+    service: response.headers.get("x-evenai-service"),
+    versionId: response.headers.get("x-evenai-version-id"),
+    error,
+    body,
   };
+}
+
+async function targetedProbe(canaryVersionId) {
+  let probe = null;
+  for (let attempt = 1; attempt <= PROBE_ATTEMPTS; attempt += 1) {
+    probe = await probeOnce(canaryVersionId);
+    console.log(
+      `CANARY_PROBE attempt=${attempt}/${PROBE_ATTEMPTS} status=${probe.status} service=${probe.service ?? "missing"} version=${probe.versionId ?? "missing"} error=${probe.error ?? "none"}`,
+    );
+    if (
+      probe.status === 200
+      && probe.service === WORKER_NAME
+      && probe.versionId === canaryVersionId
+    ) {
+      return probe;
+    }
+    if (attempt < PROBE_ATTEMPTS) await sleep(PROBE_DELAY_MS);
+  }
+  return probe;
 }
 
 async function activate() {
@@ -161,9 +197,15 @@ async function activate() {
     "-y",
   ]);
 
-  await new Promise((resolve) => setTimeout(resolve, 5000));
   const deploymentsAfter = await cloudflare("/deployments");
   const probe = await targetedProbe(canaryVersionId);
+  if (probe?.service !== WORKER_NAME) {
+    throw new Error(`targeted canary probe did not reach ${WORKER_NAME}; status=${probe?.status ?? "unknown"}`);
+  }
+  if (probe?.versionId !== canaryVersionId) {
+    throw new Error(`targeted canary version override was not applied; observed=${probe?.versionId ?? "missing"}`);
+  }
+
   const evidence = createCanaryActivationEvidence({
     ...plan,
     cloudflareDeployments: deploymentsAfter,
@@ -188,7 +230,7 @@ async function rollback() {
     "-y",
   ]);
 
-  await new Promise((resolve) => setTimeout(resolve, 3000));
+  await sleep(3000);
   const deployments = await cloudflare("/deployments");
   const current = deployments?.result?.deployments?.[0]?.versions;
   if (

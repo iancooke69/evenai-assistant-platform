@@ -25,6 +25,7 @@ function passingInput() {
     },
     releaseConfig: {
       workers_dev: false,
+      routes: [{ pattern: "getgascert.com/api/assistant/*", zone_name: "getgascert.com" }],
       vars: {
         ENABLE_PUBLIC_ASSISTANT: "false",
         ALLOWED_ORIGINS: "",
@@ -55,11 +56,13 @@ function passingInput() {
       status: 503,
       assistantResponse: false,
       corsOrigin: null,
+      service: "evenai-ggc-assistant",
+      error: "assistant_unavailable",
     },
   };
 }
 
-test("retains only a verified disabled deployment", () => {
+test("retains only a verified disabled deployment on the exact live route", () => {
   const result = verifyDisabledDeployment(passingInput());
 
   assert.equal(result.verified, true);
@@ -67,6 +70,30 @@ test("retains only a verified disabled deployment", () => {
   assert.deepEqual(result.failedChecks, []);
   assert.equal(result.controls.canaryActivationAuthorized, false);
   assert.equal(result.controls.publicActivationProhibited, true);
+});
+
+test("fails closed when the production route is absent", () => {
+  const input = passingInput();
+  input.releaseConfig.routes = [];
+  const result = verifyDisabledDeployment(input);
+
+  assert.equal(result.verified, false);
+  assert.deepEqual(result.failedChecks, ["release-route-configured"]);
+});
+
+test("fails closed when the production URL does not reach this Worker", () => {
+  const input = passingInput();
+  input.probe = {
+    status: 404,
+    assistantResponse: false,
+    corsOrigin: null,
+    service: null,
+    error: null,
+  };
+  const result = verifyDisabledDeployment(input);
+
+  assert.equal(result.verified, false);
+  assert.deepEqual(result.failedChecks, ["live-route-disabled-response"]);
 });
 
 test("fails closed when the active deployment is not exactly one version at 100 percent", () => {
@@ -123,11 +150,13 @@ test("fails when the route serves an assistant response or exposes CORS", () => 
     status: 200,
     assistantResponse: true,
     corsOrigin: "https://example.invalid",
+    service: "evenai-ggc-assistant",
+    error: null,
   };
   const result = verifyDisabledDeployment(input);
 
   assert.equal(result.verified, false);
-  assert.deepEqual(result.failedChecks, ["route-not-serving-assistant", "cors-not-exposed"]);
+  assert.deepEqual(result.failedChecks, ["live-route-disabled-response", "cors-not-exposed"]);
 });
 
 test("requires exact retained deployment evidence", () => {

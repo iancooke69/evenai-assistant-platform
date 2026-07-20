@@ -38,7 +38,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
 
       - name: Download release-gate evidence
         uses: actions/download-artifact@v5
@@ -58,13 +58,20 @@ jobs:
       - name: Authorize exact disabled deployment
         run: node scripts/disabled-worker-deployment.mjs --authorize
 
-      - name: Validate disabled Cloudflare configuration
+      - name: Validate disabled Cloudflare configuration and route
         run: |
           node --input-type=module <<'NODE'
           import fs from "node:fs";
           const config = JSON.parse(fs.readFileSync("wrangler.jsonc", "utf8"));
           if (config.workers_dev !== false) throw new Error("workers_dev must remain false");
           if (config.vars?.ENABLE_PUBLIC_ASSISTANT !== "false") throw new Error("ENABLE_PUBLIC_ASSISTANT must remain false");
+          if (String(config.vars?.ALLOWED_ORIGINS ?? "").trim() !== "") throw new Error("ALLOWED_ORIGINS must remain empty");
+          const route = Array.isArray(config.routes)
+            ? config.routes.find((item) => item?.pattern === "getgascert.com/api/assistant/*")
+            : null;
+          if (route?.zone_name !== "getgascert.com") {
+            throw new Error("the exact GetGasCert assistant route must be configured");
+          }
           NODE
 
       - name: Require Cloudflare deployment configuration
