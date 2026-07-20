@@ -5,6 +5,7 @@ import { createOwnerCanaryTestWorker } from "../../apps/ggc/owner-canary-test-wo
 
 const ownerToken = "private-owner-token";
 const targetVersionId = "22222222-2222-4222-8222-222222222222";
+const clientAddress = "203.0.113.42";
 
 function tokenHash(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -34,14 +35,21 @@ function environment(overrides = {}) {
   };
 }
 
-function ownerRequest(message = "How much is a CP42 certificate?", token = ownerToken) {
+function ownerRequest(
+  message = "How much is a CP42 certificate?",
+  token = ownerToken,
+  includeClientIdentity = true,
+) {
+  const headers = {
+    authorization: `Bearer ${token}`,
+    "content-type": "application/json",
+    "x-request-id": "owner-test-request",
+  };
+  if (includeClientIdentity) headers["cf-connecting-ip"] = clientAddress;
+
   return new Request("https://owner-test.example.workers.dev/api/assist", {
     method: "POST",
-    headers: {
-      authorization: `Bearer ${token}`,
-      "content-type": "application/json",
-      "x-request-id": "owner-test-request",
-    },
+    headers,
     body: JSON.stringify({ message }),
   });
 }
@@ -81,7 +89,24 @@ test("rejects unauthenticated requests before calling the service binding", asyn
   assert.equal((await response.json()).error, "owner_authentication_required");
 });
 
-test("routes an authenticated request to the exact canary through the service binding", async () => {
+test("fails closed when Cloudflare client identity is unavailable", async () => {
+  let calls = 0;
+  const worker = createOwnerCanaryTestWorker();
+  const response = await worker.fetch(ownerRequest("test", ownerToken, false), environment({
+    ASSISTANT: {
+      async fetch() {
+        calls += 1;
+        throw new Error("must not be called");
+      },
+    },
+  }));
+
+  assert.equal(response.status, 503);
+  assert.equal(calls, 0);
+  assert.equal((await response.json()).error, "client_identity_unavailable");
+});
+
+test("routes an authenticated request to the exact canary with rate-limit identity", async () => {
   let downstreamRequest;
   const worker = createOwnerCanaryTestWorker();
   const response = await worker.fetch(ownerRequest(), environment({
@@ -106,6 +131,9 @@ test("routes an authenticated request to the exact canary through the service bi
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("x-evenai-version-id"), targetVersionId);
   assert.equal(downstreamRequest.headers.get("origin"), "https://getgascert.com");
+  assert.equal(downstreamRequest.headers.get("x-real-ip"), clientAddress);
+  assert.equal(downstreamRequest.headers.get("cf-connecting-ip"), clientAddress);
+  assert.equal(downstreamRequest.headers.get("authorization"), null);
   assert.equal(
     downstreamRequest.headers.get("Cloudflare-Workers-Version-Overrides"),
     `evenai-ggc-assistant="${targetVersionId}"`,
