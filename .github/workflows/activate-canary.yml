@@ -74,6 +74,14 @@ jobs:
       - name: Require generated in-run authorization
         run: test -s "$CANARY_AUTHORIZATION_PATH"
 
+      - name: Normalize disabled baseline before activation
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RELEASE_COMMIT: ${{ steps.evidence.outputs.release_commit }}
+          ACTIVATION_RUN_ID: ${{ github.run_id }}
+        run: node scripts/normalize-canary-baseline.mjs
+
       - name: Execute protected canary activation
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
