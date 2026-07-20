@@ -52,22 +52,22 @@ function requireDeploymentEvidence(evidence, releaseCommit, deploymentRunId) {
   }
 }
 
-function binding(settings, name) {
-  if (settings?.success !== true) return null;
-  const bindings = settings?.result?.bindings;
-  if (!Array.isArray(bindings)) return null;
-  return bindings.find((candidate) => candidate?.name === name && candidate?.type === "plain_text") ?? null;
+function activeVersionId(deployments) {
+  if (deployments?.success !== true) return null;
+  const records = deployments?.result?.deployments;
+  if (!Array.isArray(records) || records.length === 0) return null;
+  const versions = records[0]?.versions;
+  if (!Array.isArray(versions) || versions.length !== 1 || Number(versions[0]?.percentage) !== 100) return null;
+  const id = String(versions[0]?.version_id ?? "").trim();
+  return id || null;
 }
 
-function cloudflareDeploymentPresent(deployments) {
-  if (deployments?.success !== true) return false;
-  const records = deployments?.result?.deployments;
-  if (!Array.isArray(records) || records.length === 0) return false;
-  return records.some((record) => (
-    typeof record?.id === "string"
-    && Array.isArray(record?.versions)
-    && record.versions.some((version) => typeof version?.version_id === "string" && Number(version?.percentage) > 0)
-  ));
+function versionBinding(versionDetails, expectedVersionId, name) {
+  if (versionDetails?.success !== true) return null;
+  if (String(versionDetails?.result?.id ?? "").trim() !== expectedVersionId) return null;
+  const bindings = versionDetails?.result?.resources?.bindings;
+  if (!Array.isArray(bindings)) return null;
+  return bindings.find((candidate) => candidate?.name === name && candidate?.type === "plain_text") ?? null;
 }
 
 function sourceConfigDisabled(config) {
@@ -88,12 +88,17 @@ export function verifyDisabledDeployment(input = {}) {
   const deploymentRunId = positiveRunId(input.deploymentRunId, "deploymentRunId");
   requireDeploymentEvidence(input.deploymentEvidence, releaseCommit, deploymentRunId);
 
-  const publicBinding = binding(input.cloudflareSettings, "ENABLE_PUBLIC_ASSISTANT");
-  const originsBinding = binding(input.cloudflareSettings, "ALLOWED_ORIGINS");
+  const deployedVersionId = activeVersionId(input.cloudflareDeployments);
+  const publicBinding = deployedVersionId
+    ? versionBinding(input.cloudflareVersionDetails, deployedVersionId, "ENABLE_PUBLIC_ASSISTANT")
+    : null;
+  const originsBinding = deployedVersionId
+    ? versionBinding(input.cloudflareVersionDetails, deployedVersionId, "ALLOWED_ORIGINS")
+    : null;
 
   const checks = Object.freeze({
     "deployment-evidence": "pass",
-    "cloudflare-deployment": cloudflareDeploymentPresent(input.cloudflareDeployments) ? "pass" : "fail",
+    "cloudflare-deployment": deployedVersionId ? "pass" : "fail",
     "release-config-disabled": sourceConfigDisabled(input.releaseConfig) ? "pass" : "fail",
     "live-binding-disabled": publicBinding?.text === "false" ? "pass" : "fail",
     "live-origins-empty": originsBinding && String(originsBinding.text ?? "").trim() === "" ? "pass" : "fail",
