@@ -34,19 +34,37 @@ export function normalizeDeploymentRunId(value) {
   return labelledMatches[0];
 }
 
+export function normalizeDisabledDeploymentInputs(input = {}) {
+  return Object.freeze({
+    releaseCommit: normalizeReleaseCommit(input.releaseCommit),
+    releaseGateRunId: normalizeDeploymentRunId(input.releaseGateRunId),
+  });
+}
+
 function runCli() {
   const outputPath = process.env.GITHUB_OUTPUT;
   if (!outputPath) throw new Error("GITHUB_OUTPUT is required");
 
   const releaseCommit = normalizeReleaseCommit(process.env.RAW_RELEASE_COMMIT);
-  const deploymentRunId = normalizeDeploymentRunId(process.env.RAW_DEPLOYMENT_RUN_ID);
+  const rawReleaseGateRunId = process.env.RAW_RELEASE_GATE_RUN_ID;
 
+  if (rawReleaseGateRunId != null) {
+    const releaseGateRunId = normalizeDeploymentRunId(rawReleaseGateRunId);
+    fs.appendFileSync(
+      outputPath,
+      `release_commit=${releaseCommit}\nrelease_gate_run_id=${releaseGateRunId}\n`,
+      "utf8",
+    );
+    console.log(`PASS: normalized release ${releaseCommit.slice(0, 7)} and release-gate run ${releaseGateRunId}.`);
+    return;
+  }
+
+  const deploymentRunId = normalizeDeploymentRunId(process.env.RAW_DEPLOYMENT_RUN_ID);
   fs.appendFileSync(
     outputPath,
     `release_commit=${releaseCommit}\ndeployment_run_id=${deploymentRunId}\n`,
     "utf8",
   );
-
   console.log(`PASS: normalized release ${releaseCommit.slice(0, 7)} and deployment run ${deploymentRunId}.`);
 }
 
