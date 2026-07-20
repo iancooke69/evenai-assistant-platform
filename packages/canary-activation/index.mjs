@@ -42,11 +42,38 @@ function currentDeployment(payload) {
   return deployments[0];
 }
 
-function binding(settings, name) {
-  if (settings?.success !== true) throw new Error("Cloudflare settings query did not succeed");
-  const bindings = settings?.result?.bindings;
-  if (!Array.isArray(bindings)) throw new Error("Cloudflare settings bindings are unavailable");
+export function currentStableVersionId(payload) {
+  const deployment = currentDeployment(payload);
+  const versions = Array.isArray(deployment?.versions) ? deployment.versions : [];
+  if (versions.length !== 1 || Number(versions[0]?.percentage) !== 100) {
+    throw new Error("activation requires one currently deployed disabled version at 100 percent");
+  }
+  return versionId(versions[0]?.version_id, "stableVersionId");
+}
+
+function versionBinding(versionDetails, name) {
+  if (versionDetails?.success !== true) throw new Error("Cloudflare version detail query did not succeed");
+  const bindings = versionDetails?.result?.resources?.bindings;
+  if (!Array.isArray(bindings)) throw new Error("deployed Worker version bindings are unavailable");
   return bindings.find((candidate) => candidate?.name === name) ?? null;
+}
+
+export function verifyDisabledVersionDetails(versionDetails, expectedVersionId) {
+  const stableVersionId = versionId(expectedVersionId, "stableVersionId");
+  const observedVersionId = versionId(versionDetails?.result?.id, "versionDetails.result.id");
+  if (observedVersionId !== stableVersionId) {
+    throw new Error("Cloudflare version details do not match the deployed stable version");
+  }
+
+  const enabled = versionBinding(versionDetails, "ENABLE_PUBLIC_ASSISTANT");
+  const origins = versionBinding(versionDetails, "ALLOWED_ORIGINS");
+  if (enabled?.type !== "plain_text" || enabled?.text !== "false") {
+    throw new Error("deployed stable version is not in the required disabled posture");
+  }
+  if (origins?.type !== "plain_text" || String(origins?.text ?? "").trim() !== "") {
+    throw new Error("deployed stable version origins must be empty before canary activation");
+  }
+  return true;
 }
 
 export function validateCanaryAuthorization(evidence, latestDeploymentRunId) {
@@ -93,21 +120,8 @@ export function validateCanaryAuthorization(evidence, latestDeploymentRunId) {
 
 export function prepareCanaryActivation(input = {}) {
   const authorization = validateCanaryAuthorization(input.authorizationEvidence, input.latestDeploymentRunId);
-  const deployment = currentDeployment(input.cloudflareDeployments);
-  const versions = Array.isArray(deployment?.versions) ? deployment.versions : [];
-  if (versions.length !== 1 || Number(versions[0]?.percentage) !== 100) {
-    throw new Error("activation requires one currently deployed disabled version at 100 percent");
-  }
-  const stableVersionId = versionId(versions[0].version_id, "stableVersionId");
-
-  const enabled = binding(input.cloudflareSettings, "ENABLE_PUBLIC_ASSISTANT");
-  const origins = binding(input.cloudflareSettings, "ALLOWED_ORIGINS");
-  if (enabled?.type !== "plain_text" || enabled?.text !== "false") {
-    throw new Error("live Worker is not in the required disabled posture");
-  }
-  if (origins?.type !== "plain_text" || String(origins?.text ?? "").trim() !== "") {
-    throw new Error("live Worker origins must be empty before canary activation");
-  }
+  const stableVersionId = currentStableVersionId(input.cloudflareDeployments);
+  verifyDisabledVersionDetails(input.stableVersionDetails, stableVersionId);
 
   const base = structuredClone(input.baseConfig ?? {});
   if (base.workers_dev !== false || base.vars?.ENABLE_PUBLIC_ASSISTANT !== "false") {
@@ -231,6 +245,7 @@ export function createCanaryRollbackEvidence(input = {}) {
     activationRunId: positiveRunId(input.activationRunId, "activationRunId"),
     stableVersionId: versionId(input.stableVersionId, "stableVersionId"),
     restoredStablePercent: 100,
+    disabledVersionBindingsVerified: input.disabledVersionBindingsVerified === true,
     publicActivationAuthorized: false,
   });
 }
