@@ -50,11 +50,12 @@ After the split is created, the workflow:
 1. reads the active Cloudflare deployment and requires the exact 95/5 split;
 2. attempts to route an `OPTIONS` probe directly to the canary with Cloudflare's version-override header;
 3. if the override is not applied, searches bounded privacy-safe version-affinity keys against the live 5% split until one is confirmed twice on the exact canary version;
-4. uses the same override or affinity key for one allowed-origin application request;
-5. requires the application request to remain on the exact canary version and return HTTP 200, the approved CORS origin, and an assistant result;
-6. writes the privacy-safe `canary-activation-evidence` artifact.
+4. when public-route targeting is unavailable, deploys a short-lived token-protected probe Worker with a service binding to `evenai-ggc-assistant`;
+5. applies the exact canary version override on the internal service-binding request and performs the mandatory allowed-origin assistant application request;
+6. requires HTTP 200, the exact canary version ID, the approved CORS origin and an assistant result;
+7. deletes the temporary probe Worker and writes the privacy-safe `canary-activation-evidence` artifact.
 
-The routing probes use `OPTIONS`, which is handled before rate limiting and before assistant execution. They therefore validate routing without consuming the application rate-limit allowance or generating assistant responses. The final application check remains mandatory.
+The direct routing probes use `OPTIONS`, which is handled before rate limiting and before assistant execution. The temporary service-binding fallback is used only after both public targeting mechanisms have failed. It is protected by a random per-run token, exists only for the duration of the probe and is deleted whether verification passes or fails.
 
 ## Fail-closed rollback
 
