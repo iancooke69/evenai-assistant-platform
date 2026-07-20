@@ -50,12 +50,13 @@ After the split is created, the workflow:
 1. reads the active Cloudflare deployment and requires the exact 95/5 split;
 2. attempts to route an `OPTIONS` probe directly to the canary with Cloudflare's version-override header;
 3. if the override is not applied, searches bounded privacy-safe version-affinity keys against the live 5% split until one is confirmed twice on the exact canary version;
-4. when public-route targeting is unavailable, deploys a short-lived token-protected probe Worker with a service binding to `evenai-ggc-assistant`;
-5. applies the exact canary version override on the internal service-binding request and performs the mandatory allowed-origin assistant application request;
-6. requires HTTP 200, the exact canary version ID, the approved CORS origin and an assistant result;
-7. deletes the temporary probe Worker and writes the privacy-safe `canary-activation-evidence` artifact.
+4. when public-route targeting is unavailable, deploys a short-lived probe Worker with a service binding to `evenai-ggc-assistant`;
+5. protects that Worker with a random unguessable path, marks every response with a probe-gateway header and waits up to 90 seconds for a newly created `workers.dev` route to become reachable;
+6. applies the exact canary version override on the internal service-binding request and performs the mandatory allowed-origin assistant application request;
+7. requires HTTP 200, the probe-gateway marker, the exact canary version ID, the approved CORS origin and an assistant result;
+8. deletes the temporary probe Worker and writes the privacy-safe `canary-activation-evidence` artifact.
 
-The direct routing probes use `OPTIONS`, which is handled before rate limiting and before assistant execution. The temporary service-binding fallback is used only after both public targeting mechanisms have failed. It is protected by a random per-run token, exists only for the duration of the probe and is deleted whether verification passes or fails.
+The direct routing probes use `OPTIONS`, which is handled before rate limiting and before assistant execution. The temporary service-binding fallback is used only after both public targeting mechanisms have failed. The unguessable path avoids dependence on a custom authorization header, the gateway marker distinguishes propagation responses from Worker responses, and the temporary Worker is deleted whether verification passes or fails.
 
 ## Fail-closed rollback
 
