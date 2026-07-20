@@ -11,9 +11,13 @@ concurrency:
   group: evenai-ggc-production-canary
   cancel-in-progress: false
 
+env:
+  VERIFICATION_EVIDENCE_PATH: verification-evidence/disabled-deployment-verification-evidence.json
+  CANARY_AUTHORIZATION_PATH: canary-activation-authorization.json
+
 jobs:
   activate-canary:
-    name: Activate bounded canary
+    name: Validate, authorize and activate bounded canary
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production-disabled
@@ -36,32 +40,39 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: node scripts/resolve-disabled-deployment-evidence.mjs
 
-      - name: Discover latest canary authorization
-        id: authorization
+      - name: Discover latest passing disabled verification
+        id: verification
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: node scripts/resolve-canary-authorization-evidence.mjs
+        run: node scripts/resolve-disabled-verification-evidence.mjs
 
-      - name: Download exact canary authorization
+      - name: Download exact disabled verification evidence
         uses: actions/download-artifact@v5
         with:
-          name: canary-activation-authorization
-          path: authorization-evidence
-          run-id: ${{ steps.authorization.outputs.authorization_run_id }}
+          name: disabled-deployment-verification-evidence
+          path: verification-evidence
+          run-id: ${{ steps.verification.outputs.verification_run_id }}
           repository: ${{ github.repository }}
           github-token: ${{ github.token }}
 
-      - name: Validate authorization against latest disabled deployment
+      - name: Validate verification against latest disabled deployment
         id: evidence
         env:
-          CANARY_AUTHORIZATION_PATH: authorization-evidence/canary-activation-authorization.json
           LATEST_DEPLOYMENT_RUN_ID: ${{ steps.deployment.outputs.deployment_run_id }}
-          AUTHORIZATION_RUN_ID: ${{ steps.authorization.outputs.authorization_run_id }}
-        run: node scripts/resolve-canary-authorization-evidence.mjs --read-evidence
+        run: node scripts/resolve-disabled-verification-evidence.mjs --read-evidence
 
       - name: Run full repository test suite
         run: npm test
+
+      - name: Create in-run bounded canary authorization
+        env:
+          VERIFICATION_RUN_ID: ${{ steps.verification.outputs.verification_run_id }}
+          LATEST_DEPLOYMENT_RUN_ID: ${{ steps.deployment.outputs.deployment_run_id }}
+        run: node scripts/authorize-canary-activation.mjs
+
+      - name: Require generated in-run authorization
+        run: test -s "$CANARY_AUTHORIZATION_PATH"
 
       - name: Execute protected canary activation
         env:
@@ -69,9 +80,9 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           RELEASE_COMMIT: ${{ steps.evidence.outputs.release_commit }}
           LATEST_DEPLOYMENT_RUN_ID: ${{ steps.deployment.outputs.deployment_run_id }}
-          AUTHORIZATION_RUN_ID: ${{ steps.authorization.outputs.authorization_run_id }}
+          AUTHORIZATION_RUN_ID: ${{ github.run_id }}
           ACTIVATION_RUN_ID: ${{ github.run_id }}
-          CANARY_AUTHORIZATION_PATH: authorization-evidence/canary-activation-authorization.json
+          CANARY_AUTHORIZATION_PATH: ${{ env.CANARY_AUTHORIZATION_PATH }}
         run: node scripts/execute-canary-activation.mjs --activate
 
       - name: Upload canary activation evidence
