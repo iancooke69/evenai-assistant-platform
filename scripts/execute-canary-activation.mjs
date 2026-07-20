@@ -3,11 +3,13 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import {
+  activationBaseline,
   APPROVED_ORIGINS,
   createCanaryActivationEvidence,
   createCanaryRollbackEvidence,
   currentStableVersionId,
   prepareCanaryActivation,
+  validateCanaryAuthorization,
   verifyDisabledVersionDetails,
 } from "../packages/canary-activation/index.mjs";
 import { parseVersionUploadRecord } from "../packages/wrangler-output/index.mjs";
@@ -235,6 +237,27 @@ export async function probeCanaryApplication(input = {}) {
   return probe;
 }
 
+async function restoreStableBaseline({ stableVersionId, activationRunId, message }) {
+  wrangler([
+    "versions", "deploy",
+    `${stableVersionId}@100%`,
+    "--config", DISABLED_CONFIG_PATH,
+    "--message", message,
+    "-y",
+  ]);
+
+  await sleep(3000);
+  const deployments = await cloudflare("/deployments");
+  const restoredStableVersionId = currentStableVersionId(deployments);
+  if (restoredStableVersionId !== stableVersionId) {
+    throw new Error("stable baseline recovery selected an unexpected Worker version");
+  }
+  const stableVersionDetails = await cloudflare(`/versions/${stableVersionId}`);
+  verifyDisabledVersionDetails(stableVersionDetails, stableVersionId);
+  console.log(`PASS: stable disabled baseline restored for activation run ${activationRunId}.`);
+  return Object.freeze({ deployments, stableVersionDetails });
+}
+
 async function activate() {
   required("CLOUDFLARE_API_TOKEN");
   required("CLOUDFLARE_ACCOUNT_ID");
@@ -242,19 +265,49 @@ async function activate() {
   const activationRunId = required("ACTIVATION_RUN_ID");
   const latestDeploymentRunId = required("LATEST_DEPLOYMENT_RUN_ID");
   const authorizationPath = required("CANARY_AUTHORIZATION_PATH");
+  const authorizationEvidence = readJson(authorizationPath, "canary authorization evidence");
+  const authorization = validateCanaryAuthorization(authorizationEvidence, latestDeploymentRunId);
+  if (authorization.releaseCommit !== releaseCommit.toLowerCase()) {
+    throw new Error("canary authorization release does not match the requested release commit");
+  }
 
-  const deploymentsBefore = await cloudflare("/deployments");
-  const stableVersionId = currentStableVersionId(deploymentsBefore);
-  const stableVersionDetails = await cloudflare(`/versions/${stableVersionId}`);
   materializeRelease(releaseCommit);
+  const baseConfig = readJson(DISABLED_CONFIG_PATH, "release Wrangler configuration");
+  let deploymentsBefore = await cloudflare("/deployments");
+  const baseline = activationBaseline(deploymentsBefore);
+  let stableVersionDetails = await cloudflare(`/versions/${baseline.stableVersionId}`);
+  verifyDisabledVersionDetails(stableVersionDetails, baseline.stableVersionId);
+
+  if (baseline.mode === "bounded-canary") {
+    writeJson(PLAN_PATH, {
+      schemaVersion: 1,
+      releaseCommit: authorization.releaseCommit,
+      deploymentRunId: authorization.deploymentRunId,
+      authorizationRunId: authorization.authorizationRunId,
+      activationRunId,
+      stableVersionId: baseline.stableVersionId,
+      canaryVersionId: baseline.canaryVersionId,
+      recoveryOnly: true,
+    });
+    console.log(
+      `INFO: found an existing exact 95/5 canary; restoring disabled stable version ${baseline.stableVersionId} before a fresh authorized activation.`,
+    );
+    const restored = await restoreStableBaseline({
+      stableVersionId: baseline.stableVersionId,
+      activationRunId,
+      message: `Pre-activation recovery to disabled baseline for run ${activationRunId}`,
+    });
+    deploymentsBefore = restored.deployments;
+    stableVersionDetails = restored.stableVersionDetails;
+  }
 
   const prepared = prepareCanaryActivation({
-    authorizationEvidence: readJson(authorizationPath, "canary authorization evidence"),
+    authorizationEvidence,
     latestDeploymentRunId,
     activationRunId,
     cloudflareDeployments: deploymentsBefore,
     stableVersionDetails,
-    baseConfig: readJson(DISABLED_CONFIG_PATH, "release Wrangler configuration"),
+    baseConfig,
   });
 
   writeJson(CANARY_CONFIG_PATH, prepared.canaryConfig);
@@ -321,28 +374,11 @@ async function rollback() {
   const plan = readJson(PLAN_PATH, "canary plan");
   if (!fs.existsSync(DISABLED_CONFIG_PATH)) throw new Error("disabled release configuration is unavailable for rollback");
 
-  wrangler([
-    "versions", "deploy",
-    `${plan.stableVersionId}@100%`,
-    "--config", DISABLED_CONFIG_PATH,
-    "--message", `Automatic fail-closed rollback for canary run ${activationRunId}`,
-    "-y",
-  ]);
-
-  await sleep(3000);
-  const deployments = await cloudflare("/deployments");
-  const current = deployments?.result?.deployments?.[0]?.versions;
-  if (
-    !Array.isArray(current)
-    || current.length !== 1
-    || current[0]?.version_id !== plan.stableVersionId
-    || Number(current[0]?.percentage) !== 100
-  ) {
-    throw new Error("rollback did not restore the disabled stable version to 100 percent");
-  }
-
-  const stableVersionDetails = await cloudflare(`/versions/${plan.stableVersionId}`);
-  verifyDisabledVersionDetails(stableVersionDetails, plan.stableVersionId);
+  await restoreStableBaseline({
+    stableVersionId: plan.stableVersionId,
+    activationRunId,
+    message: `Automatic fail-closed rollback for canary run ${activationRunId}`,
+  });
   writeJson(ROLLBACK_EVIDENCE_PATH, createCanaryRollbackEvidence({
     activationRunId,
     stableVersionId: plan.stableVersionId,
