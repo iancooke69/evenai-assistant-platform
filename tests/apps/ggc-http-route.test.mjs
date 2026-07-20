@@ -13,23 +13,25 @@ function request(path) {
 
 const handle = createAssistantHttpHandler({
   assistant: async (message) => ({ message }),
-  route: GGC_ASSISTANT_ROUTE,
+  routes: [GGC_ASSISTANT_ROUTE, "/v1/assist"],
 });
 
 test("declares the exact mounted production route", () => {
   assert.equal(GGC_ASSISTANT_ROUTE, "/api/assistant/v1/assist");
 });
 
-test("serves requests on the mounted production route", async () => {
-  const response = await handle(request(GGC_ASSISTANT_ROUTE));
-  const body = await response.json();
+test("serves requests on mounted and internal route aliases", async () => {
+  for (const path of [GGC_ASSISTANT_ROUTE, "/v1/assist"]) {
+    const response = await handle(request(path));
+    const body = await response.json();
 
-  assert.equal(response.status, 200);
-  assert.equal(body.requestId, "route-test");
-  assert.deepEqual(body.result, { message: "What does a CP42 cost?" });
+    assert.equal(response.status, 200);
+    assert.equal(body.requestId, "route-test");
+    assert.deepEqual(body.result, { message: "What does a CP42 cost?" });
+  }
 });
 
-test("does not expose the unmounted internal route", async () => {
-  const response = await handle(request("/v1/assist"));
+test("rejects unrelated routes", async () => {
+  const response = await handle(request("/unknown"));
   assert.equal(response.status, 404);
 });
