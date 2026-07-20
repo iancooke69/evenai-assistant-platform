@@ -42,13 +42,39 @@ function currentDeployment(payload) {
   return deployments[0];
 }
 
-export function currentStableVersionId(payload) {
+export function activationBaseline(payload) {
   const deployment = currentDeployment(payload);
   const versions = Array.isArray(deployment?.versions) ? deployment.versions : [];
-  if (versions.length !== 1 || Number(versions[0]?.percentage) !== 100) {
+
+  if (versions.length === 1 && Number(versions[0]?.percentage) === 100) {
+    return Object.freeze({
+      mode: "disabled",
+      stableVersionId: versionId(versions[0]?.version_id, "stableVersionId"),
+      canaryVersionId: null,
+    });
+  }
+
+  if (versions.length === 2) {
+    const stable = versions.find((candidate) => Number(candidate?.percentage) === CANARY_LIMITS.stableExposurePercent);
+    const canary = versions.find((candidate) => Number(candidate?.percentage) === CANARY_LIMITS.maximumExposurePercent);
+    if (stable && canary) {
+      return Object.freeze({
+        mode: "bounded-canary",
+        stableVersionId: versionId(stable.version_id, "stableVersionId"),
+        canaryVersionId: versionId(canary.version_id, "canaryVersionId"),
+      });
+    }
+  }
+
+  throw new Error("activation requires one disabled version at 100 percent or an exact recoverable 95/5 bounded canary");
+}
+
+export function currentStableVersionId(payload) {
+  const baseline = activationBaseline(payload);
+  if (baseline.mode !== "disabled") {
     throw new Error("activation requires one currently deployed disabled version at 100 percent");
   }
-  return versionId(versions[0]?.version_id, "stableVersionId");
+  return baseline.stableVersionId;
 }
 
 function versionBinding(versionDetails, name) {
