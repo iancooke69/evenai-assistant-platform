@@ -178,13 +178,22 @@ export function verifyCanaryDeployment(payload, stableVersion, canaryVersion) {
 
 export function verifyCanaryProbe(probe = {}) {
   const status = Number(probe.status);
-  if (!Number.isInteger(status) || status < 200 || status > 499 || [403, 429].includes(status)) {
-    throw new Error("targeted canary probe did not reach an enabled protected version");
+  if (status !== 200) {
+    throw new Error("targeted canary application probe did not return HTTP 200");
   }
   if (probe.corsOrigin !== APPROVED_ORIGINS[0]) throw new Error("targeted canary probe did not return the approved CORS origin");
   const body = String(probe.body ?? "");
   if (/assistant_unavailable|rate-limiter-unavailable|origin_not_allowed/.test(body)) {
     throw new Error("targeted canary probe exposed a disabled or unprotected state");
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    throw new Error("targeted canary application probe did not return JSON");
+  }
+  if (!parsed?.result || typeof parsed.result !== "object") {
+    throw new Error("targeted canary application probe did not return an assistant result");
   }
   return true;
 }
