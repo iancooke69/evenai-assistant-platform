@@ -14,7 +14,7 @@ function response({ status, versionId, body = "", corsOrigin = null }) {
     "x-evenai-version-id": versionId,
   });
   if (corsOrigin) headers.set("access-control-allow-origin", corsOrigin);
-  return new Response(body, { status, headers });
+  return new Response(status === 204 ? null : body, { status, headers });
 }
 
 test("uses a successful version override without affinity fallback", async () => {
