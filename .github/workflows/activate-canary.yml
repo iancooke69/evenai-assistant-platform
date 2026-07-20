@@ -82,6 +82,12 @@ jobs:
           ACTIVATION_RUN_ID: ${{ github.run_id }}
         run: node scripts/normalize-canary-baseline.mjs
 
+      - name: Release normalized deployment worktree
+        run: |
+          git worktree remove --force release-source || true
+          rm -rf release-source
+          git worktree prune
+
       - name: Execute protected canary activation
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
