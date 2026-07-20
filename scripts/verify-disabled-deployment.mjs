@@ -53,6 +53,8 @@ async function probeProductionRoute(value) {
       status: response.status,
       assistantResponse: response.status === 200 && body && typeof body === "object" && "result" in body,
       corsOrigin: response.headers.get("access-control-allow-origin"),
+      service: response.headers.get("x-evenai-service"),
+      error: body && typeof body === "object" ? body.error ?? null : null,
     });
   } finally {
     clearTimeout(timeout);
