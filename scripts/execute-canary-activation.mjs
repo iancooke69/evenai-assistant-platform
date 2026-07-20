@@ -21,8 +21,8 @@ const PROBE_URL = "https://getgascert.com/api/assistant/v1/assist";
 const OVERRIDE_PROBE_ATTEMPTS = 6;
 const OVERRIDE_PROBE_DELAY_MS = 2000;
 const AFFINITY_PROBE_ATTEMPTS = 256;
-const SERVICE_PROBE_ATTEMPTS = 12;
-const SERVICE_PROBE_DELAY_MS = 1000;
+const SERVICE_PROBE_ATTEMPTS = 45;
+const SERVICE_PROBE_DELAY_MS = 2000;
 const PLAN_PATH = "canary-plan.json";
 const SOURCE_DIR = "release-source";
 const DISABLED_CONFIG_PATH = `${SOURCE_DIR}/wrangler.jsonc`;
@@ -138,6 +138,7 @@ async function readProbe(response) {
     corsOrigin: response.headers.get("access-control-allow-origin"),
     service: response.headers.get("x-evenai-service"),
     versionId: response.headers.get("x-evenai-version-id"),
+    gateway: response.headers.get("x-evenai-probe-gateway"),
     error: typeof parsed?.error === "string" ? parsed.error : null,
     body,
   });
@@ -268,7 +269,8 @@ function safeProbeName(activationRunId) {
 export function createServiceBindingProbeDefinition(input = {}) {
   const probeName = nonEmpty(input.probeName, "probeName");
   const canaryVersionId = nonEmpty(input.canaryVersionId, "canaryVersionId");
-  const probeToken = nonEmpty(input.probeToken, "probeToken");
+  const probePath = nonEmpty(input.probePath, "probePath");
+  if (!probePath.startsWith("/")) throw new TypeError("probePath must begin with a slash");
   const compatibilityDate = String(input.compatibilityDate ?? "2026-07-20").trim();
 
   const config = Object.freeze({
@@ -281,28 +283,29 @@ export function createServiceBindingProbeDefinition(input = {}) {
     vars: Object.freeze({
       TARGET_WORKER_NAME: WORKER_NAME,
       TARGET_VERSION_ID: canaryVersionId,
-      PROBE_TOKEN: probeToken,
+      PROBE_PATH: probePath,
       APPROVED_ORIGIN: APPROVED_ORIGINS[0],
     }),
   });
 
   const source = `export default {
   async fetch(request, env) {
-    if (request.headers.get("x-evenai-probe-token") !== env.PROBE_TOKEN) {
-      return new Response("Not found", { status: 404 });
+    const url = new URL(request.url);
+    const gatewayHeaders = {
+      "cache-control": "no-store",
+      "x-evenai-probe-gateway": "temporary-service-binding",
+    };
+
+    if (request.method !== "GET" || url.pathname !== env.PROBE_PATH) {
+      return new Response("Not found", { status: 404, headers: gatewayHeaders });
     }
 
-    const headers = new Headers(request.headers);
-    headers.delete("content-length");
-    headers.delete("host");
-    headers.delete("x-evenai-probe-token");
-    headers.set("origin", env.APPROVED_ORIGIN);
-    headers.set("content-type", "application/json");
-    headers.set(
-      "Cloudflare-Workers-Version-Overrides",
-      env.TARGET_WORKER_NAME + '=\"' + env.TARGET_VERSION_ID + '\"',
-    );
-
+    const headers = new Headers({
+      origin: env.APPROVED_ORIGIN,
+      "content-type": "application/json",
+      "Cloudflare-Workers-Version-Overrides":
+        env.TARGET_WORKER_NAME + '=\"' + env.TARGET_VERSION_ID + '\"',
+    });
     const downstreamRequest = new Request(
       "https://getgascert.com/api/assistant/v1/assist",
       {
@@ -311,7 +314,15 @@ export function createServiceBindingProbeDefinition(input = {}) {
         body: JSON.stringify({ message: "Can you help?" }),
       },
     );
-    return env.ASSISTANT.fetch(downstreamRequest);
+    const downstream = await env.ASSISTANT.fetch(downstreamRequest);
+    const responseHeaders = new Headers(downstream.headers);
+    responseHeaders.set("cache-control", "no-store");
+    responseHeaders.set("x-evenai-probe-gateway", "temporary-service-binding");
+    return new Response(downstream.body, {
+      status: downstream.status,
+      statusText: downstream.statusText,
+      headers: responseHeaders,
+    });
   },
 };
 `;
@@ -329,9 +340,9 @@ export async function probeCanaryThroughServiceBinding(input = {}) {
   const delayMs = Number.isInteger(input.delayMs) && input.delayMs >= 0
     ? input.delayMs
     : SERVICE_PROBE_DELAY_MS;
-  const probeToken = typeof input.probeToken === "string" && input.probeToken.trim()
-    ? input.probeToken.trim()
-    : randomUUID();
+  const probePath = typeof input.probePath === "string" && input.probePath.trim()
+    ? input.probePath.trim()
+    : `/probe-${randomUUID()}`;
   const probeName = safeProbeName(activationRunId);
   const directory = path.resolve(`.canary-service-probe-${activationRunId}`);
   const configPath = path.join(directory, "wrangler.jsonc");
@@ -340,7 +351,7 @@ export async function probeCanaryThroughServiceBinding(input = {}) {
   const definition = createServiceBindingProbeDefinition({
     probeName,
     canaryVersionId,
-    probeToken,
+    probePath,
     compatibilityDate,
   });
 
@@ -361,22 +372,26 @@ export async function probeCanaryThroughServiceBinding(input = {}) {
     let lastProbe = null;
 
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
-      const response = await fetchImpl(`${target}/probe`, {
+      const response = await fetchImpl(`${target}${probePath}?attempt=${attempt}`, {
         method: "GET",
-        headers: { "x-evenai-probe-token": probeToken },
+        headers: { "cache-control": "no-store" },
       });
       lastProbe = await readProbe(response);
       console.log(
-        `CANARY_SERVICE_BINDING_PROBE attempt=${attempt}/${attempts} status=${lastProbe.status} service=${lastProbe.service ?? "missing"} version=${lastProbe.versionId ?? "missing"} error=${lastProbe.error ?? "none"}`,
+        `CANARY_SERVICE_BINDING_PROBE attempt=${attempt}/${attempts} status=${lastProbe.status} gateway=${lastProbe.gateway ?? "missing"} service=${lastProbe.service ?? "missing"} version=${lastProbe.versionId ?? "missing"} error=${lastProbe.error ?? "none"}`,
       );
-      if (lastProbe.service === WORKER_NAME && lastProbe.versionId === canaryVersionId) {
+      if (
+        lastProbe.gateway === "temporary-service-binding"
+        && lastProbe.service === WORKER_NAME
+        && lastProbe.versionId === canaryVersionId
+      ) {
         return lastProbe;
       }
       if (attempt < attempts && delayMs > 0) await sleepImpl(delayMs);
     }
 
     throw new Error(
-      `service-binding probe did not reach canary version ${canaryVersionId}; last observed=${lastProbe?.versionId ?? "missing"}`,
+      `service-binding probe did not reach canary version ${canaryVersionId}; last status=${lastProbe?.status ?? "missing"} gateway=${lastProbe?.gateway ?? "missing"} version=${lastProbe?.versionId ?? "missing"}`,
     );
   } finally {
     try {
