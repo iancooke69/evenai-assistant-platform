@@ -28,7 +28,7 @@ export async function findLatestCanaryAuthorizationRun({ fetchImpl = fetch, repo
   for (let page = 1; page <= 5; page += 1) {
     const runsPayload = await apiJson(
       fetchImpl,
-      `${apiRoot}/actions/workflows/${WORKFLOW_FILE}/runs?event=workflow_dispatch&status=success&branch=main&per_page=100&page=${page}`,
+      `${apiRoot}/actions/workflows/${WORKFLOW_FILE}/runs?status=success&branch=main&per_page=100&page=${page}`,
       token,
     );
     const runs = Array.isArray(runsPayload?.workflow_runs) ? runsPayload.workflow_runs : [];

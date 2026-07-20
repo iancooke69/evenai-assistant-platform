@@ -1,6 +1,11 @@
 name: Authorize canary activation
 
 on:
+  workflow_run:
+    workflows:
+      - Verify disabled Worker deployment
+    types:
+      - completed
   workflow_dispatch:
 
 permissions:
@@ -14,6 +19,7 @@ env:
 jobs:
   authorize-canary:
     name: Authorize bounded canary without activation
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production-disabled
@@ -21,6 +27,8 @@ jobs:
     steps:
       - name: Check out authorization control plane
         uses: actions/checkout@v5
+        with:
+          ref: main
 
       - name: Set up Node.js
         uses: actions/setup-node@v5
@@ -34,12 +42,23 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: node scripts/resolve-disabled-deployment-evidence.mjs
 
-      - name: Discover latest successful disabled verification
+      - name: Resolve exact successful disabled verification run
         id: verification
         env:
+          EVENT_NAME: ${{ github.event_name }}
+          TRIGGER_VERIFICATION_RUN_ID: ${{ github.event.workflow_run.id }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: node scripts/resolve-disabled-verification-evidence.mjs
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            test -n "$TRIGGER_VERIFICATION_RUN_ID"
+            echo "verification_run_id=$TRIGGER_VERIFICATION_RUN_ID" >> "$GITHUB_OUTPUT"
+            echo "PASS: using triggering verification run $TRIGGER_VERIFICATION_RUN_ID."
+            sleep 5
+          else
+            node scripts/resolve-disabled-verification-evidence.mjs
+          fi
 
       - name: Download exact disabled verification evidence
         uses: actions/download-artifact@v5
