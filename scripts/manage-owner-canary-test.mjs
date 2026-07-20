@@ -2,11 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import {
-  activationBaseline,
-  APPROVED_ORIGINS,
-} from "../packages/canary-activation/index.mjs";
+import { APPROVED_ORIGINS } from "../packages/canary-activation/index.mjs";
 import { parseWorkerDeployRecord } from "../packages/wrangler-output/index.mjs";
+import { classifyCanaryBaseline } from "./normalize-canary-baseline.mjs";
 
 const ASSISTANT_WORKER_NAME = "evenai-ggc-assistant";
 const GATEWAY_WORKER_NAME = "evenai-ggc-owner-canary-test";
@@ -60,19 +58,20 @@ function sleep(milliseconds) {
 async function cloudflare(pathname, options = {}) {
   const accountId = required("CLOUDFLARE_ACCOUNT_ID");
   const token = required("CLOUDFLARE_API_TOKEN");
+  const { allowNotFound = false, ...requestOptions } = options;
   const response = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${accountId}${pathname}`,
     {
-      ...options,
+      ...requestOptions,
       headers: {
         authorization: `Bearer ${token}`,
         accept: "application/json",
-        ...(options.headers ?? {}),
+        ...(requestOptions.headers ?? {}),
       },
     },
   );
   const body = await response.text();
-  if (!response.ok && !(options.allowNotFound === true && response.status === 404)) {
+  if (!response.ok && !(allowNotFound && response.status === 404)) {
     throw new Error(`Cloudflare API ${pathname} failed (${response.status}): ${body.slice(0, 300)}`);
   }
   if (!body) return null;
@@ -182,8 +181,8 @@ export async function deployOwnerCanaryTest(input = {}) {
   const deployments = await cloudflareImpl(
     `/workers/scripts/${ASSISTANT_WORKER_NAME}/deployments`,
   );
-  const baseline = activationBaseline(deployments);
-  if (baseline.mode !== "bounded-canary" || !baseline.canaryVersionId) {
+  const baseline = classifyCanaryBaseline(deployments);
+  if (baseline.recoveryRequired !== true || !baseline.canaryVersionId) {
     throw new Error("owner testing requires the exact active 95/5 protected canary");
   }
 
