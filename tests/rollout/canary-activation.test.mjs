@@ -4,11 +4,13 @@ import {
   APPROVED_ORIGINS,
   createCanaryActivationEvidence,
   createCanaryRollbackEvidence,
+  currentStableVersionId,
   locateCanaryVersion,
   prepareCanaryActivation,
   validateCanaryAuthorization,
   verifyCanaryDeployment,
   verifyCanaryProbe,
+  verifyDisabledVersionDetails,
 } from "../../packages/canary-activation/index.mjs";
 
 const releaseCommit = "a".repeat(40);
@@ -57,30 +59,46 @@ function disabledDeployments() {
   };
 }
 
-function disabledSettings() {
+function disabledStableVersionDetails() {
   return {
     success: true,
     result: {
-      bindings: [
-        { name: "ENABLE_PUBLIC_ASSISTANT", type: "plain_text", text: "false" },
-        { name: "ALLOWED_ORIGINS", type: "plain_text", text: "" },
-      ],
+      id: stableVersionId,
+      resources: {
+        bindings: [
+          { name: "ENABLE_PUBLIC_ASSISTANT", type: "plain_text", text: "false" },
+          { name: "ALLOWED_ORIGINS", type: "plain_text", text: "" },
+        ],
+      },
     },
   };
 }
 
-test("prepares an exact bounded canary configuration from verified disabled state", () => {
+function baseConfig() {
+  return {
+    name: "evenai-ggc-assistant",
+    main: "apps/ggc/worker.mjs",
+    workers_dev: false,
+    vars: { ENABLE_PUBLIC_ASSISTANT: "false", ALLOWED_ORIGINS: "" },
+  };
+}
+
+test("prepares an exact bounded canary configuration from the deployed disabled version", () => {
   const result = prepareCanaryActivation({
     authorizationEvidence: authorization(),
     latestDeploymentRunId: "100",
     activationRunId: "400",
     cloudflareDeployments: disabledDeployments(),
-    cloudflareSettings: disabledSettings(),
-    baseConfig: {
-      name: "evenai-ggc-assistant",
-      main: "apps/ggc/worker.mjs",
-      workers_dev: false,
-      vars: { ENABLE_PUBLIC_ASSISTANT: "false", ALLOWED_ORIGINS: "" },
+    stableVersionDetails: disabledStableVersionDetails(),
+    baseConfig: baseConfig(),
+    cloudflareSettings: {
+      success: true,
+      result: {
+        bindings: [
+          { name: "ENABLE_PUBLIC_ASSISTANT", type: "plain_text", text: "true" },
+          { name: "ALLOWED_ORIGINS", type: "plain_text", text: APPROVED_ORIGINS.join(",") },
+        ],
+      },
     },
   });
 
@@ -92,6 +110,28 @@ test("prepares an exact bounded canary configuration from verified disabled stat
   assert.deepEqual(result.canaryConfig.ratelimits[0].simple, { limit: 10, period: 60 });
   assert.equal(result.canaryConfig.observability.enabled, true);
   assert.equal(result.canaryConfig.workers_dev, false);
+});
+
+test("uses the active deployment to identify the stable version", () => {
+  assert.equal(currentStableVersionId(disabledDeployments()), stableVersionId);
+  const deployments = disabledDeployments();
+  deployments.result.deployments[0].versions = [
+    { version_id: stableVersionId, percentage: 95 },
+    { version_id: canaryVersionId, percentage: 5 },
+  ];
+  assert.throws(() => currentStableVersionId(deployments), /one currently deployed disabled version/);
+});
+
+test("requires exact disabled bindings on the deployed stable version", () => {
+  assert.equal(verifyDisabledVersionDetails(disabledStableVersionDetails(), stableVersionId), true);
+
+  const enabled = disabledStableVersionDetails();
+  enabled.result.resources.bindings[0].text = "true";
+  assert.throws(() => verifyDisabledVersionDetails(enabled, stableVersionId), /not in the required disabled posture/);
+
+  const mismatched = disabledStableVersionDetails();
+  mismatched.result.id = canaryVersionId;
+  assert.throws(() => verifyDisabledVersionDetails(mismatched, stableVersionId), /do not match the deployed stable version/);
 });
 
 test("rejects stale or widened canary authorization", () => {
@@ -112,8 +152,8 @@ test("requires a single disabled stable version before activation", () => {
     latestDeploymentRunId: "100",
     activationRunId: "400",
     cloudflareDeployments: deployments,
-    cloudflareSettings: disabledSettings(),
-    baseConfig: { workers_dev: false, vars: { ENABLE_PUBLIC_ASSISTANT: "false" } },
+    stableVersionDetails: disabledStableVersionDetails(),
+    baseConfig: baseConfig(),
   }), /one currently deployed disabled version/);
 });
 
@@ -184,7 +224,12 @@ test("activation and rollback evidence never authorize full public release", () 
   assert.equal(evidence.observation.automaticPromotion, false);
   assert.equal(evidence.controls.fullPublicActivationAuthorized, false);
 
-  const rollback = createCanaryRollbackEvidence({ activationRunId: "400", stableVersionId });
+  const rollback = createCanaryRollbackEvidence({
+    activationRunId: "400",
+    stableVersionId,
+    disabledVersionBindingsVerified: true,
+  });
   assert.equal(rollback.restoredStablePercent, 100);
+  assert.equal(rollback.disabledVersionBindingsVerified, true);
   assert.equal(rollback.publicActivationAuthorized, false);
 });
