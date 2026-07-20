@@ -3,6 +3,6 @@ import { askGgcAssistant } from "./index.mjs";
 
 export const handleGgcAssistantRequest = createAssistantHttpHandler({
   assistant: askGgcAssistant,
-  route: "/v1/assist",
+  route: "/api/assistant/v1/assist",
   maximumInputLength: 2000,
 });
