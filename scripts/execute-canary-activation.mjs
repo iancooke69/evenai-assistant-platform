@@ -6,7 +6,9 @@ import {
   APPROVED_ORIGINS,
   createCanaryActivationEvidence,
   createCanaryRollbackEvidence,
+  currentStableVersionId,
   prepareCanaryActivation,
+  verifyDisabledVersionDetails,
 } from "../packages/canary-activation/index.mjs";
 import { parseVersionUploadRecord } from "../packages/wrangler-output/index.mjs";
 
@@ -14,6 +16,7 @@ const WORKER_NAME = "evenai-ggc-assistant";
 const PROBE_URL = "https://getgascert.com/api/assistant/v1/assist";
 const PLAN_PATH = "canary-plan.json";
 const SOURCE_DIR = "release-source";
+const DISABLED_CONFIG_PATH = `${SOURCE_DIR}/wrangler.jsonc`;
 const CANARY_CONFIG_PATH = `${SOURCE_DIR}/wrangler.canary.jsonc`;
 const ACTIVATION_EVIDENCE_PATH = "canary-activation-evidence.json";
 const ROLLBACK_EVIDENCE_PATH = "canary-rollback-evidence.json";
@@ -105,7 +108,8 @@ async function activate() {
   const authorizationPath = required("CANARY_AUTHORIZATION_PATH");
 
   const deploymentsBefore = await cloudflare("/deployments");
-  const settingsBefore = await cloudflare("/settings");
+  const stableVersionId = currentStableVersionId(deploymentsBefore);
+  const stableVersionDetails = await cloudflare(`/versions/${stableVersionId}`);
   materializeRelease(releaseCommit);
 
   const prepared = prepareCanaryActivation({
@@ -113,8 +117,8 @@ async function activate() {
     latestDeploymentRunId,
     activationRunId,
     cloudflareDeployments: deploymentsBefore,
-    cloudflareSettings: settingsBefore,
-    baseConfig: readJson(`${SOURCE_DIR}/wrangler.jsonc`, "release Wrangler configuration"),
+    stableVersionDetails,
+    baseConfig: readJson(DISABLED_CONFIG_PATH, "release Wrangler configuration"),
   });
 
   writeJson(CANARY_CONFIG_PATH, prepared.canaryConfig);
@@ -174,12 +178,12 @@ async function rollback() {
   required("CLOUDFLARE_ACCOUNT_ID");
   const activationRunId = required("ACTIVATION_RUN_ID");
   const plan = readJson(PLAN_PATH, "canary plan");
-  if (!fs.existsSync(CANARY_CONFIG_PATH)) throw new Error("canary configuration is unavailable for rollback");
+  if (!fs.existsSync(DISABLED_CONFIG_PATH)) throw new Error("disabled release configuration is unavailable for rollback");
 
   wrangler([
     "versions", "deploy",
     `${plan.stableVersionId}@100%`,
-    "--config", CANARY_CONFIG_PATH,
+    "--config", DISABLED_CONFIG_PATH,
     "--message", `Automatic fail-closed rollback for canary run ${activationRunId}`,
     "-y",
   ]);
@@ -195,11 +199,15 @@ async function rollback() {
   ) {
     throw new Error("rollback did not restore the disabled stable version to 100 percent");
   }
+
+  const stableVersionDetails = await cloudflare(`/versions/${plan.stableVersionId}`);
+  verifyDisabledVersionDetails(stableVersionDetails, plan.stableVersionId);
   writeJson(ROLLBACK_EVIDENCE_PATH, createCanaryRollbackEvidence({
     activationRunId,
     stableVersionId: plan.stableVersionId,
+    disabledVersionBindingsVerified: true,
   }));
-  console.log("PASS: failed canary disabled and stable version restored to 100 percent.");
+  console.log("PASS: failed canary disabled; stable version and disabled bindings restored and verified.");
 }
 
 async function main() {
