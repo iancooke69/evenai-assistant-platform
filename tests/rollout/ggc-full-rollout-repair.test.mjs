@@ -200,9 +200,9 @@ test("repair uploads and deploys with the generated enabled config and rolls bac
     new URL("../../scripts/repair-ggc-full-rollout.mjs", import.meta.url),
     "utf8",
   );
-  assert.match(source, /"versions", "upload",\s*\n\s*"--config", ENABLED_CONFIG_PATH/);
-  assert.match(source, /`${enabledVersionId}@100%`,\s*\n\s*"--config", ENABLED_CONFIG_PATH/);
-  assert.match(source, /`${disabledVersionId}@100%`,\s*\n\s*"--config", BASE_CONFIG_PATH/);
+  assert.ok(source.includes('"versions", "upload",\n    "--config", ENABLED_CONFIG_PATH,'));
+  assert.ok(source.includes('`${enabledVersionId}@100%`,\n    "--config", ENABLED_CONFIG_PATH,'));
+  assert.ok(source.includes('`${disabledVersionId}@100%`,\n    "--config", BASE_CONFIG_PATH,'));
 });
 
 test("workflow is one-shot, protected and automatically restores the disabled version on failure", () => {
