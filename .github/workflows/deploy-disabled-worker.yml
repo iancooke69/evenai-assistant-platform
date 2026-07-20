@@ -52,7 +52,7 @@ jobs:
           ref: ${{ steps.inputs.outputs.release_commit }}
 
       - name: Download release-gate evidence
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v7
         with:
           name: manual-release-gate-evidence
           path: release-gate
@@ -103,7 +103,7 @@ jobs:
         run: node scripts/disabled-worker-deployment.mjs
 
       - name: Upload disabled-deployment evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: disabled-worker-deployment-evidence
           path: disabled-deployment-evidence.json
