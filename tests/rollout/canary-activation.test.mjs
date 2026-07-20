@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  activationBaseline,
   APPROVED_ORIGINS,
   createCanaryActivationEvidence,
   createCanaryRollbackEvidence,
@@ -55,6 +56,21 @@ function disabledDeployments() {
     success: true,
     result: {
       deployments: [{ id: "deployment-1", versions: [{ version_id: stableVersionId, percentage: 100 }] }],
+    },
+  };
+}
+
+function boundedCanaryDeployments() {
+  return {
+    success: true,
+    result: {
+      deployments: [{
+        id: "deployment-2",
+        versions: [
+          { version_id: stableVersionId, percentage: 95 },
+          { version_id: canaryVersionId, percentage: 5 },
+        ],
+      }],
     },
   };
 }
@@ -114,12 +130,25 @@ test("prepares an exact bounded canary configuration from the deployed disabled 
 
 test("uses the active deployment to identify the stable version", () => {
   assert.equal(currentStableVersionId(disabledDeployments()), stableVersionId);
-  const deployments = disabledDeployments();
-  deployments.result.deployments[0].versions = [
-    { version_id: stableVersionId, percentage: 95 },
-    { version_id: canaryVersionId, percentage: 5 },
-  ];
-  assert.throws(() => currentStableVersionId(deployments), /one currently deployed disabled version/);
+  assert.throws(() => currentStableVersionId(boundedCanaryDeployments()), /one currently deployed disabled version/);
+});
+
+test("recognizes only an exact existing 95/5 canary as recoverable", () => {
+  assert.deepEqual(activationBaseline(disabledDeployments()), {
+    mode: "disabled",
+    stableVersionId,
+    canaryVersionId: null,
+  });
+  assert.deepEqual(activationBaseline(boundedCanaryDeployments()), {
+    mode: "bounded-canary",
+    stableVersionId,
+    canaryVersionId,
+  });
+
+  const widened = boundedCanaryDeployments();
+  widened.result.deployments[0].versions[0].percentage = 90;
+  widened.result.deployments[0].versions[1].percentage = 10;
+  assert.throws(() => activationBaseline(widened), /exact recoverable 95\/5 bounded canary/);
 });
 
 test("requires exact disabled bindings on the deployed stable version", () => {
@@ -142,16 +171,11 @@ test("rejects stale or widened canary authorization", () => {
 });
 
 test("requires a single disabled stable version before activation", () => {
-  const deployments = disabledDeployments();
-  deployments.result.deployments[0].versions = [
-    { version_id: stableVersionId, percentage: 95 },
-    { version_id: canaryVersionId, percentage: 5 },
-  ];
   assert.throws(() => prepareCanaryActivation({
     authorizationEvidence: authorization(),
     latestDeploymentRunId: "100",
     activationRunId: "400",
-    cloudflareDeployments: deployments,
+    cloudflareDeployments: boundedCanaryDeployments(),
     stableVersionDetails: disabledStableVersionDetails(),
     baseConfig: baseConfig(),
   }), /one currently deployed disabled version/);
@@ -166,18 +190,7 @@ test("locates a uniquely tagged uploaded Worker version", () => {
 });
 
 test("verifies only the exact 95/5 deployment split", () => {
-  const deployment = {
-    success: true,
-    result: {
-      deployments: [{
-        id: "deployment-2",
-        versions: [
-          { version_id: stableVersionId, percentage: 95 },
-          { version_id: canaryVersionId, percentage: 5 },
-        ],
-      }],
-    },
-  };
+  const deployment = boundedCanaryDeployments();
   assert.equal(verifyCanaryDeployment(deployment, stableVersionId, canaryVersionId), true);
   deployment.result.deployments[0].versions[1].percentage = 6;
   assert.throws(() => verifyCanaryDeployment(deployment, stableVersionId, canaryVersionId), /fixed at 5/);
@@ -198,18 +211,6 @@ test("targeted probe must return a successful assistant response", () => {
 });
 
 test("activation and rollback evidence never authorize full public release", () => {
-  const cloudflareDeployments = {
-    success: true,
-    result: {
-      deployments: [{
-        id: "deployment-2",
-        versions: [
-          { version_id: stableVersionId, percentage: 95 },
-          { version_id: canaryVersionId, percentage: 5 },
-        ],
-      }],
-    },
-  };
   const evidence = createCanaryActivationEvidence({
     releaseCommit,
     deploymentRunId: "100",
@@ -217,7 +218,7 @@ test("activation and rollback evidence never authorize full public release", () 
     activationRunId: "400",
     stableVersionId,
     canaryVersionId,
-    cloudflareDeployments,
+    cloudflareDeployments: boundedCanaryDeployments(),
     probe: successfulProbe,
   });
   assert.equal(evidence.exposure.canaryPercent, 5);
