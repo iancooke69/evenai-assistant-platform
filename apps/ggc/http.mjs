@@ -5,6 +5,6 @@ export const GGC_ASSISTANT_ROUTE = "/api/assistant/v1/assist";
 
 export const handleGgcAssistantRequest = createAssistantHttpHandler({
   assistant: askGgcAssistant,
-  route: GGC_ASSISTANT_ROUTE,
+  routes: [GGC_ASSISTANT_ROUTE, "/v1/assist"],
   maximumInputLength: 2000,
 });
