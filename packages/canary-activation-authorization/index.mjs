@@ -4,9 +4,10 @@ const REQUIRED_DISABLED_CHECKS = Object.freeze([
   "deployment-evidence",
   "cloudflare-deployment",
   "release-config-disabled",
+  "release-route-configured",
   "live-binding-disabled",
   "live-origins-empty",
-  "route-not-serving-assistant",
+  "live-route-disabled-response",
   "cors-not-exposed",
 ]);
 
