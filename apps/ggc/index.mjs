@@ -3,6 +3,7 @@ import pricesData from "./knowledge/prices.json" with { type: "json" };
 import bookingActionsData from "./knowledge/booking-actions.json" with { type: "json" };
 import escalationActionsData from "./knowledge/escalation-actions.json" with { type: "json" };
 import emergencyRulesData from "./knowledge/emergency-rules.json" with { type: "json" };
+import faqsData from "./knowledge/faqs.json" with { type: "json" };
 import { processAssistantTurn } from "../../packages/assistant-runtime/index.mjs";
 
 function cloneArray(value, name) {
@@ -18,9 +19,12 @@ export async function loadGgcContext() {
   const bookingActions = cloneArray(bookingActionsData, "booking-actions.json");
   const escalationActions = cloneArray(escalationActionsData, "escalation-actions.json");
   const emergencyRules = cloneArray(emergencyRulesData, "emergency-rules.json");
+  const faqs = cloneArray(faqsData, "faqs.json");
 
   return Object.freeze({
     services,
+    faqs,
+    records: [...services, ...faqs],
     prices,
     actions: [...bookingActions, ...escalationActions],
     emergencyRules,

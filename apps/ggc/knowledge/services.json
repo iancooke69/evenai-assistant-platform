@@ -2,34 +2,79 @@
   {
     "id": "cp42",
     "name": "CP42 Commercial Catering Gas Safety Certificate",
-    "summary": "Commercial catering gas safety certification service.",
+    "summary": "Commercial catering gas safety certification for fixed commercial kitchens, including pubs, restaurants, cafés and takeaways.",
     "status": "active",
-    "keywords": ["commercial kitchen", "catering", "gas certificate", "cp42"],
+    "keywords": [
+      "cp42",
+      "commercial catering",
+      "commercial kitchen",
+      "fixed commercial kitchen",
+      "restaurant",
+      "restaurant gas certificate",
+      "pub",
+      "pub gas certificate",
+      "cafe",
+      "café",
+      "takeaway",
+      "food business",
+      "catering premises"
+    ],
     "priceId": "price-cp42",
     "bookingActionId": "book-cp42",
-    "source": {"type": "owner-approved", "reference": "GGC canonical service catalogue", "verifiedAt": "2026-07-19"},
+    "source": {
+      "type": "owner-approved",
+      "reference": "GGC canonical service catalogue",
+      "verifiedAt": "2026-07-19"
+    },
     "approved": true
   },
   {
     "id": "cp44",
-    "name": "CP44 Commercial Gas Safety Certificate",
-    "summary": "Commercial gas safety certification service for applicable non-domestic installations.",
+    "name": "CP44 Mobile Catering Gas Safety Certificate",
+    "summary": "Mobile catering and LPG gas safety certification for catering vans, food trucks, trailers, market stalls and event caterers.",
     "status": "active",
-    "keywords": ["commercial gas", "gas certificate", "cp44"],
+    "keywords": [
+      "cp44",
+      "mobile catering",
+      "mobile catering van",
+      "catering van",
+      "food truck",
+      "burger van",
+      "catering trailer",
+      "market stall",
+      "event catering",
+      "mobile lpg",
+      "lpg catering"
+    ],
     "priceId": "price-cp44",
     "bookingActionId": "book-cp44",
-    "source": {"type": "owner-approved", "reference": "GGC canonical service catalogue", "verifiedAt": "2026-07-19"},
+    "source": {
+      "type": "owner-approved",
+      "reference": "GGC canonical service catalogue",
+      "verifiedAt": "2026-07-19"
+    },
     "approved": true
   },
   {
     "id": "cp12",
     "name": "CP12 Landlord Gas Safety Certificate",
-    "summary": "Landlord gas safety certificate service.",
+    "summary": "Landlord gas safety certification for domestic rental properties.",
     "status": "active",
-    "keywords": ["landlord", "rental", "gas certificate", "cp12"],
+    "keywords": [
+      "cp12",
+      "landlord",
+      "landlord certificate",
+      "rental property",
+      "domestic rental",
+      "tenant property"
+    ],
     "priceId": "price-cp12",
     "bookingActionId": "book-cp12",
-    "source": {"type": "owner-approved", "reference": "GGC canonical service catalogue", "verifiedAt": "2026-07-19"},
+    "source": {
+      "type": "owner-approved",
+      "reference": "GGC canonical service catalogue",
+      "verifiedAt": "2026-07-19"
+    },
     "approved": true
   }
 ]

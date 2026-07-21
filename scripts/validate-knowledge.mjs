@@ -23,6 +23,7 @@ const prices = await load('prices.json');
 const bookings = await load('booking-actions.json');
 const escalations = await load('escalation-actions.json');
 const coverage = await load('coverage.json');
+const faqs = await load('faqs.json');
 const emergencyRules = await load('emergency-rules.json');
 
 const serviceIds = uniqueIds(services, 'services');
@@ -30,6 +31,7 @@ const priceIds = uniqueIds(prices, 'prices');
 const bookingIds = uniqueIds(bookings, 'booking-actions');
 const escalationIds = uniqueIds(escalations, 'escalation-actions');
 uniqueIds(coverage, 'coverage');
+uniqueIds(faqs, 'faqs');
 uniqueIds(emergencyRules, 'emergency-rules');
 
 for (const service of services) {
@@ -50,9 +52,15 @@ for (const action of [...bookings, ...escalations]) {
   }
 }
 
+for (const faq of faqs) {
+  if (faq.approved !== true) throw new Error(`faq ${faq.id} is not approved`);
+  if (!String(faq.question ?? '').trim()) throw new Error(`faq ${faq.id} requires a question`);
+  if (!String(faq.answer ?? '').trim()) throw new Error(`faq ${faq.id} requires an answer`);
+}
+
 for (const rule of emergencyRules) {
   if (rule.stopNormalFlow !== true) throw new Error(`emergency rule ${rule.id} must stop normal flow`);
   if (!escalationIds.has(rule.actionId)) throw new Error(`emergency rule ${rule.id} has unknown actionId`);
 }
 
-console.log(`PASS: ${services.length} services, ${prices.length} prices, ${coverage.length} coverage records and ${emergencyRules.length} emergency rules validated.`);
+console.log(`PASS: ${services.length} services, ${prices.length} prices, ${faqs.length} FAQs, ${coverage.length} coverage records and ${emergencyRules.length} emergency rules validated.`);
