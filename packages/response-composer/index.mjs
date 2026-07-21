@@ -33,8 +33,12 @@ export function composeResponse(outcome, context = {}) {
   }
 
   if (outcome.route === "knowledge") {
-    const service = outcome.matches?.[0]?.record ?? null;
-    if (!service?.approved || service.status !== "active") {
+    const record = outcome.matches?.[0]?.record ?? null;
+
+    if (
+      !record?.approved
+      || (record.status !== undefined && record.status !== "active")
+    ) {
       return {
         type: "unknown",
         text: "I could not verify an approved answer for that question.",
@@ -43,9 +47,30 @@ export function composeResponse(outcome, context = {}) {
       };
     }
 
-    const price = service.priceId ? uniqueById(service.priceId, context.prices) : null;
-    const action = service.bookingActionId ? uniqueById(service.bookingActionId, context.actions) : null;
-    const activeAction = action?.enabled === true && action?.url ? action : null;
+    if (typeof record.answer === "string" && record.answer.trim()) {
+      return {
+        type: "knowledge",
+        text: record.answer.trim(),
+        facts: [
+          {
+            kind: "faq",
+            id: record.id,
+            source: record.source ?? null,
+          },
+        ],
+        actions: [],
+      };
+    }
+
+    const service = record;
+    const price = service.priceId
+      ? uniqueById(service.priceId, context.prices)
+      : null;
+    const action = service.bookingActionId
+      ? uniqueById(service.bookingActionId, context.actions)
+      : null;
+    const activeAction =
+      action?.enabled === true && action?.url ? action : null;
 
     const textParts = [service.name, service.summary].filter(Boolean);
     if (price?.display) textParts.push(`Price: ${price.display}.`);
@@ -54,10 +79,26 @@ export function composeResponse(outcome, context = {}) {
       type: "knowledge",
       text: textParts.join(" "),
       facts: [
-        { kind: "service", id: service.id, source: service.source ?? null },
-        ...(price ? [{ kind: "price", id: price.id, source: price.source ?? null }] : []),
+        {
+          kind: "service",
+          id: service.id,
+          source: service.source ?? null,
+        },
+        ...(price
+          ? [{
+              kind: "price",
+              id: price.id,
+              source: price.source ?? null,
+            }]
+          : []),
       ],
-      actions: activeAction ? [{ id: activeAction.id, label: activeAction.label, url: activeAction.url }] : [],
+      actions: activeAction
+        ? [{
+            id: activeAction.id,
+            label: activeAction.label,
+            url: activeAction.url,
+          }]
+        : [],
     };
   }
 

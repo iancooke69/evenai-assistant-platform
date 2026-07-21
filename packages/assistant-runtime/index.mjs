@@ -5,7 +5,7 @@ export function processAssistantTurn(input, context = {}) {
   const outcome = orchestrateTurn(input, {
     emergencyRules: context.emergencyRules ?? [],
     actions: context.actions ?? [],
-    records: context.services ?? context.records ?? [],
+    records: context.records ?? context.services ?? [],
     limit: context.limit,
     minimumScore: context.minimumScore,
     fields: context.fields,
