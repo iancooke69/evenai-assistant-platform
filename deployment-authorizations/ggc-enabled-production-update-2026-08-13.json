@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "decision": "ggc-enabled-production-update-authorized",
+  "authorizedBy": "Ian Cooke",
+  "authorizedAt": "2026-08-13",
+  "targetWorker": "evenai-ggc-assistant",
+  "requiredStartingState": "one-enabled-version-at-100-percent",
+  "targetExposurePercent": 100,
+  "rollbackToCurrentEnabledVersionRequired": true,
+  "automaticFutureUpdatesAuthorized": false,
+  "rationale": "The owner explicitly instructed ChatGPT to commit, test and merge the GetGasCert chatbot fix. Deploy the validated backend knowledge and routing correction to the currently enabled production Worker, preserve the approved origins, rate limiter and observability controls, verify live CP12/CP42/CP44, emergency, service-area, combined-price and website-corpus answers, and restore the previously enabled version automatically if any step fails."
+}
