@@ -92,7 +92,7 @@ test("returns all requested current certificate prices in one answer", async () 
   assert.match(result.response.text, /CP44: £199/);
 });
 
-test("uses the public website corpus as a fallback for broader website questions", async () => {
+test("uses the public website corpus as a Worker-compatible fallback for broader website questions", async () => {
   const corpus = {
     chunks: [
       {
@@ -103,13 +103,18 @@ test("uses the public website corpus as a fallback for broader website questions
       },
     ],
   };
-  const fetch = async () => new Response(JSON.stringify(corpus), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-  });
+  let requestInit;
+  const fetch = async (_url, init) => {
+    requestInit = init;
+    return new Response(JSON.stringify(corpus), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
 
   const result = await askGgcAssistant("What is your refund and cancellation policy?", { fetch });
   assert.equal(result.route, "website-knowledge");
   assert.match(result.response.text, /refund and cancellation policy/i);
   assert.equal(result.response.facts[0].source.url, "https://getgascert.com/refund-cancellation-policy");
+  assert.deepEqual(requestInit, { headers: { accept: "application/json" } });
 });
