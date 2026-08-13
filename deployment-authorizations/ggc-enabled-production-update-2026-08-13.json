@@ -2,13 +2,13 @@
   "schemaVersion": 1,
   "decision": "ggc-enabled-production-update-authorized",
   "authorizedBy": "Ian Cooke",
-  "authorizedAt": "2026-08-13T21:00:00+01:00",
+  "authorizedAt": "2026-08-13T21:18:00+01:00",
   "targetWorker": "evenai-ggc-assistant",
   "requiredStartingState": "one-enabled-version-at-100-percent",
   "targetExposurePercent": 100,
   "rollbackToCurrentEnabledVersionRequired": true,
   "automaticFutureUpdatesAuthorized": false,
-  "compatibilityUpdateOfRunId": "31738790394",
-  "validatedReleaseCommit": "0a94416d5288462e877da1c0538c4dd0ef15370d",
-  "rationale": "Deploy the already validated GetGasCert assistant compatibility release that raises only the GGC input ceiling from 2,000 to 16,000 characters so the currently deployed website's legacy retrieval envelope is accepted while the Worker extracts and uses the real customer question. Preserve approved origins, rate limiting, observability, server-side website retrieval and automatic rollback to the currently enabled version if any production acceptance check fails."
+  "cleanupUpdateOfRunId": "31739496237",
+  "validatedReleaseCommit": "2eabf200fbfbc8d54e94eb1030b9bd1b289fc4a3",
+  "rationale": "Deploy the validated GetGasCert assistant cleanup release now that the website sends only the raw customer question. Restore the GGC HTTP input ceiling from the temporary 16,000-character compatibility allowance to the website's 2,000-character contract. Preserve approved origins, rate limiting, observability, server-side website retrieval and automatic rollback to the currently enabled version if any production acceptance check fails."
 }
