@@ -182,7 +182,6 @@ async function fetchWebsiteCorpus(fetchImpl) {
   if (typeof fetchImpl !== "function") return null;
   const response = await fetchImpl(WEBSITE_KNOWLEDGE_URL, {
     headers: { accept: "application/json" },
-    cache: "force-cache",
   });
   if (!response?.ok) return null;
   const corpus = await response.json();
