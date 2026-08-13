@@ -2,12 +2,13 @@
   "schemaVersion": 1,
   "decision": "ggc-enabled-production-update-authorized",
   "authorizedBy": "Ian Cooke",
-  "authorizedAt": "2026-08-13T20:00:00+01:00",
+  "authorizedAt": "2026-08-13T21:00:00+01:00",
   "targetWorker": "evenai-ggc-assistant",
   "requiredStartingState": "one-enabled-version-at-100-percent",
   "targetExposurePercent": 100,
   "rollbackToCurrentEnabledVersionRequired": true,
   "automaticFutureUpdatesAuthorized": false,
-  "retryOfRunId": "31738196430",
-  "rationale": "Retry the owner-authorized GetGasCert chatbot update after the first guarded deployment automatically restored the previous enabled version. The retry removes the unsupported cache option from the Worker-side website corpus fetch, preserves the approved origins, rate limiter and observability controls, repeats the full live CP12/CP42/CP44, emergency, service-area, combined-price and website-corpus acceptance suite, and restores the currently enabled version automatically if any step fails."
+  "compatibilityUpdateOfRunId": "31738790394",
+  "validatedReleaseCommit": "0a94416d5288462e877da1c0538c4dd0ef15370d",
+  "rationale": "Deploy the already validated GetGasCert assistant compatibility release that raises only the GGC input ceiling from 2,000 to 16,000 characters so the currently deployed website's legacy retrieval envelope is accepted while the Worker extracts and uses the real customer question. Preserve approved origins, rate limiting, observability, server-side website retrieval and automatic rollback to the currently enabled version if any production acceptance check fails."
 }
