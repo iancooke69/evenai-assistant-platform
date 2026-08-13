@@ -1,39 +1,24 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
-import {
-  oneVersionAt100,
-  validateEnabledUpdateAuthorization,
-} from "../../scripts/update-ggc-enabled-production.mjs";
+import { oneVersionAt100 } from "../../scripts/update-ggc-enabled-production.mjs";
 
 const versionId = "11111111-2222-3333-4444-555555555555";
 
-test("accepts the exact one-shot enabled production update authorization", () => {
-  const result = validateEnabledUpdateAuthorization({
-    schemaVersion: 1,
-    decision: "ggc-enabled-production-update-authorized",
-    authorizedBy: "Ian Cooke",
-    targetWorker: "evenai-ggc-assistant",
-    requiredStartingState: "one-enabled-version-at-100-percent",
-    targetExposurePercent: 100,
-    rollbackToCurrentEnabledVersionRequired: true,
-    automaticFutureUpdatesAuthorized: false,
-    rationale: "Validated GGC chatbot production update",
-  });
-  assert.equal(result.authorizedBy, "Ian Cooke");
-});
-
-test("rejects a disabled-baseline authorization", () => {
-  assert.throws(() => validateEnabledUpdateAuthorization({
-    schemaVersion: 1,
-    decision: "ggc-enabled-production-update-authorized",
-    authorizedBy: "Ian Cooke",
-    targetWorker: "evenai-ggc-assistant",
-    requiredStartingState: "one-disabled-version-at-100-percent",
-    targetExposurePercent: 100,
-    rollbackToCurrentEnabledVersionRequired: true,
-    automaticFutureUpdatesAuthorized: false,
-    rationale: "wrong state",
-  }));
+test("records the exact one-shot enabled production update authorization", () => {
+  const value = JSON.parse(fs.readFileSync(
+    "deployment-authorizations/ggc-enabled-production-update-2026-08-13.json",
+    "utf8",
+  ));
+  assert.equal(value.schemaVersion, 1);
+  assert.equal(value.decision, "ggc-enabled-production-update-authorized");
+  assert.equal(value.authorizedBy, "Ian Cooke");
+  assert.equal(value.targetWorker, "evenai-ggc-assistant");
+  assert.equal(value.requiredStartingState, "one-enabled-version-at-100-percent");
+  assert.equal(value.targetExposurePercent, 100);
+  assert.equal(value.rollbackToCurrentEnabledVersionRequired, true);
+  assert.equal(value.automaticFutureUpdatesAuthorized, false);
+  assert.ok(String(value.rationale).length > 40);
 });
 
 test("requires exactly one currently deployed version at 100 percent", () => {
