@@ -114,7 +114,7 @@ test("enabled Worker delegates approved and permitted requests", async () => {
 
   assert.equal(response.status, 200);
   assert.equal(body.result.response.type, "knowledge");
-  assert.match(body.result.response.text, /£299/);
+  assert.match(body.result.response.text, /£249/);
   assert.equal(response.headers.get("access-control-allow-origin"), allowedOrigin);
 });
 
@@ -129,5 +129,6 @@ test("emergency precedence is preserved by the Worker entrypoint", async () => {
   assert.equal(response.status, 200);
   assert.equal(body.result.route, "emergency");
   assert.equal(body.result.blocked, true);
-  assert.doesNotMatch(body.result.response.text, /£299/);
+  assert.match(body.result.response.text, /0800\s+111\s+999/);
+  assert.doesNotMatch(body.result.response.text, /£249/);
 });
