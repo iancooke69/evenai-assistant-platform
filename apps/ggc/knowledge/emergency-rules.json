@@ -1,12 +1,12 @@
 [
   {
     "id": "suspected-gas-emergency",
-    "triggers": ["smell of gas", "smell gas", "suspected gas leak", "gas leak", "carbon monoxide alarm", "gas emergency"],
-    "response": "This may be a gas emergency. Stop the normal booking flow and present only the approved emergency guidance and human escalation route.",
+    "triggers": ["smell of gas", "smell gas", "suspected gas leak", "gas leak", "carbon monoxide alarm", "carbon monoxide", "gas emergency", "immediate danger"],
+    "response": "If you smell gas, suspect a gas leak, have a carbon monoxide concern or believe there is immediate danger, contact the National Gas Emergency Service on 0800 111 999 first. Do not continue with the normal booking flow until the immediate emergency has been dealt with.",
     "priority": 1,
     "actionId": "emergency-human-escalation",
     "stopNormalFlow": true,
-    "source": {"type": "owner-approved", "reference": "GGC assistant safety boundary", "verifiedAt": "2026-07-19"},
+    "source": {"type":"owner-approved","reference":"GetGasCert public website emergency guidance","verifiedAt":"2026-08-13"},
     "approved": true
   }
 ]

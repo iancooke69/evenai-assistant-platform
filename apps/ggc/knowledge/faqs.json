@@ -1,27 +1,30 @@
 [
   {
     "id": "coverage-east-anglia",
-    "question": "Do you cover Norwich, Norfolk or elsewhere in East Anglia?",
-    "answer": "Yes. GetGasCert provides Gas Safe registered gas safety certification and commercial gas engineering services across Norwich, Norfolk and the wider East Anglia region. If you are unsure whether your location is covered, contact us and we can confirm availability.",
+    "question": "Which areas do GetGasCert cover in East Anglia?",
+    "answer": "GetGasCert serves Norfolk, Suffolk, Cambridgeshire and Essex across East Anglia, subject to engineer availability for the requested service and location. If you are unsure whether your postcode is covered, contact GetGasCert to confirm availability.",
     "topics": [
       "coverage",
-      "Norwich",
-      "Norfolk",
-      "East Anglia",
       "service area",
-      "local"
+      "East Anglia",
+      "Norfolk",
+      "Suffolk",
+      "Cambridgeshire",
+      "Essex",
+      "Norwich",
+      "location"
     ],
     "source": {
       "type": "owner-approved",
-      "reference": "GGC canonical service area and owner approval",
-      "verifiedAt": "2026-07-21"
+      "reference": "GetGasCert public website service-area page",
+      "verifiedAt": "2026-08-13"
     },
     "approved": true
   },
   {
     "id": "booking-availability",
     "question": "How quickly can I book, when can someone attend and do you have availability?",
-    "answer": "Availability depends on the service required and your location. You can book online for published services, or contact us for commercial projects and we will confirm the next available appointment.",
+    "answer": "Availability depends on the service required and your location. You can book online for published services, or contact GetGasCert for commercial projects and the next available appointment can be confirmed.",
     "topics": [
       "booking",
       "availability",
@@ -31,15 +34,15 @@
     ],
     "source": {
       "type": "owner-approved",
-      "reference": "GGC approved booking guidance",
-      "verifiedAt": "2026-07-21"
+      "reference": "GetGasCert public website booking guidance",
+      "verifiedAt": "2026-08-13"
     },
     "approved": true
   },
   {
     "id": "company-information",
     "question": "Where are you based, who are you and are you Gas Safe registered?",
-    "answer": "GetGasCert provides Gas Safe registered gas safety certification and commercial gas engineering services across East Anglia, including Norwich and surrounding areas.",
+    "answer": "GetGasCert provides Gas Safe registered gas safety certification and commercial gas engineering services across East Anglia.",
     "topics": [
       "company",
       "location",
@@ -49,8 +52,8 @@
     ],
     "source": {
       "type": "owner-approved",
-      "reference": "GGC approved company information",
-      "verifiedAt": "2026-07-21"
+      "reference": "GetGasCert public website company information",
+      "verifiedAt": "2026-08-13"
     },
     "approved": true
   }
