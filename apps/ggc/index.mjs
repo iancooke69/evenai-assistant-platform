@@ -263,7 +263,7 @@ export async function loadGgcContext() {
     prices,
     actions: [...bookingActions, ...escalationActions],
     emergencyRules,
-    minimumScore: 8,
+    minimumScore: 16,
     limit: 1,
     fields: ["id", "name", "title", "summary", "question", "answer", "keywords", "topics"],
   });
