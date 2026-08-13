@@ -45,29 +45,13 @@ test("accepts an augmented website envelope without contaminating service routin
   assert.match(payload.result.response.text, /£199/);
 });
 
-test("accepts the legacy website retrieval envelope above the former 2000 character limit", async () => {
-  const legacyContext = "CP42 fixed commercial kitchen excerpt. ".repeat(240);
-  const message = [
-    "Answer the CUSTOMER QUESTION using the WEBSITE EXCERPTS below as current GetGasCert information.",
-    "CUSTOMER QUESTION:",
-    "I operate an LPG mobile catering trailer. Which gas certificate do I need?",
-    "WEBSITE EXCERPTS:",
-    legacyContext,
-  ].join("\n");
-
-  assert.ok(message.length > 2000);
-  assert.ok(message.length < 16000);
-
-  const response = await handleGgcAssistantRequest(post(message));
-  const payload = await response.json();
+test("accepts a raw assistant message at the 2000 character limit", async () => {
+  const response = await handleGgcAssistantRequest(post("x".repeat(2000)));
   assert.equal(response.status, 200);
-  assert.equal(payload.result.route, "knowledge");
-  assert.match(payload.result.response.text, /CP44/i);
-  assert.match(payload.result.response.text, /£199/);
 });
 
-test("still rejects assistant messages above the compatibility ceiling", async () => {
-  const response = await handleGgcAssistantRequest(post("x".repeat(16001)));
+test("rejects assistant messages above the raw question limit", async () => {
+  const response = await handleGgcAssistantRequest(post("x".repeat(2001)));
   assert.equal(response.status, 413);
   const payload = await response.json();
   assert.equal(payload.error, "message-too-long");
