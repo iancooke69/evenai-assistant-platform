@@ -2,20 +2,23 @@ name: Repository validation
 
 on:
   pull_request:
+    branches: [main]
   push:
     branches:
       - main
+  merge_group:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: repository-validation-${{ github.ref }}
+  group: assistant-platform-pr-validation-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   validate:
-    name: Validate repository
+    name: assistant-platform-pr-validation
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
